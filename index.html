@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Buffett Lens I Stock analysis tool</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
+  <script type="text/babel">
+    const { useState, useMemo, useRef, useEffect } = React;
+
+    const CP = { v: 5, h: 8 };
+
+    const C = {
+      page:"#ffffff", hdr:"#3d8f62",
+      border:"#c0c0c0",
+      rowNum:"#e0e0e0", rowNumFg:"#999",
+      colHdr:"#e0e0e0", colHdrFg:"#555",
+      labelCol:"#f6f6f6", labelFg:"#2a2a2a",
+      frozen:"#f6f6f6", frozenFg:"#888",
+      input:"#ffffff", inputFg:"#1a1a1a",
+      formula:"#e0e0e0", formulaFg:"#333",
+      outGreen:"#3d8f62", outGreenFg:"#ffffff",
+      outRed:"#bf5050", outRedFg:"#ffffff",
+      blueCell:"#4470a8", blueCellFg:"#ffffff",
+      ltxt:"#f6f6f6", ltxtFg:"#2a2a2a",
+      selBorder:"#2563eb", selBg:"#dbeafe",
+    };
+
+    const G = { rowNum:38, colA:192, col:122, rowH:26, blankH:8, headerH:45, fbarH:34 };
+
+    const COLS         = ["B","C","D","E","F"];
+    const NAV          = ["A","B","C","D","E","F"];
+    const DCOLS        = ["C","D","E","F"];
+    const BLANKS       = new Set([5,9,16,20,24,28,33]);
+    const TOTAL_W      = G.rowNum + G.colA + COLS.length * G.col;
+    const ALL_ROWS     = Array.from({length:35}, (_, i) => i+1);
+    const WC_PAIRS     = [["C","B"],["D","C"],["E","D"],["F","E"]];
+    const MCAPEX_CELLS = new Set(["C15","D15","E15","F15"]);
+
+    const INP = new Set([
+      "F1",
+      "C2","D2","E2","F2","C3","D3","E3","F3",
+      "C6","D6","E6","F6","C7","D7","E7","F7","C8","D8","E8","F8",
+      "B10","C10","D10","E10","F10",
+      "B11","C11","D11","E11","F11",
+      "B12","C12","D12","E12","F12",
+      "C19","D19","E19","F19",
+      "C30","D30","E30","F30","C31","D31","E31","F31",
+      "B34",
+    ]);
+    const FRZ = new Set([
+      "B2","B3","B4","B6","B7","B8","B14","B15",
+      "B17","B18","B19","B21","B22","B23",
+      "B25","B26","B27","B30","B31","B32",
+    ]);
+    const OUT  = new Set(["B35","D34","F34","D35","F35"]);
+    const LTXT = new Set(["C34","E34","C35","E35"]);
+    const BLUE = new Set(["F1","B34"]);
+    const LTXT_V = {
+      C34:"Latest OEPS Yield", E34:"Latest REPS Yield",
+      C35:"Latest DPS Yield",  E35:"REPS Turnover",
+    };
+
+    const RLBL = {
+      1:"FY", 2:"Face Value", 3:"Equity Capital · in crores", 4:"Total Shares · in crores",
+      6:"PAT · in crores", 7:"Depreciation · in crores", 8:"Amortization · in crores",
+      10:"Inventory · in crores", 11:"Trade Receivables · in crores", 12:"Trade Payables · in crores",
+      13:"Net Working Capital · in crores", 14:"Δ Working Capital · in crores", 15:"Maintenance Capex · in crores",
+      17:"Owner's Earnings · in crores", 18:"Retained Earnings · in crores", 19:"Dividend Payout · in crores",
+      21:"Owner's Earnings Per Share", 22:"Retained Earnings Per Share", 23:"Dividend Per Share",
+      25:"OEPS Yield", 26:"REPS Yield", 27:"DPS Yield",
+      29:"CY", 30:"52W High Price", 31:"52W Low Price", 32:"Average Price",
+      34:"CMP", 35:"Fair Value",
+    };
+
+    const R_YR  = new Set([1,29]);
+    const R_INT = new Set([2,4,30,31,32]);
+    const R_CR  = new Set([3,6,7,8,10,11,12,13,14,15,17,18,19]);
+    const R_PS  = new Set([21,22,23]);
+    const R_PCT = new Set([25,26,27]);
+
+    const EM   = "—";
+    const fCr  = v => { if (v==null||isNaN(v)) return EM; const s=Math.round(Math.abs(v)).toLocaleString("en-US"); return v<0?`(${s})`:s; };
+    const fPS  = v => (v==null||isNaN(v)) ? EM : Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
+    const fPct = v => (v==null||isNaN(v)) ? EM : `${(v*100).toFixed(2)}%`;
+    const fYr  = v => (v==null||isNaN(v)) ? EM : Math.round(v).toString();
+    const fInt = v => (v==null||isNaN(v)) ? EM : Math.round(Math.abs(v)).toLocaleString("en-US");
+    const fRat = v => (v==null||isNaN(v)) ? EM : v.toFixed(2);
+
+    function fmtCell(cr, v) {
+      if (v==null||isNaN(v)) return EM;
+      const r = parseInt(cr.slice(1));
+      if (R_YR.has(r))  return fYr(v);
+      if (R_INT.has(r)) return fInt(v);
+      if (R_CR.has(r))  return fCr(v);
+      if (R_PS.has(r))  return fPS(v);
+      if (R_PCT.has(r)) return fPct(v);
+      if (r===34) { const cl=cr[0]; return cl==="B" ? fInt(v) : fPct(v); }
+      if (r===35) { const cl=cr[0]; return cl==="B" ? fPS(v)  : cl==="D" ? fPct(v) : fRat(v); }
+      return String(v);
+    }
+
+    const FDS = (() => {
+      const PREV = { C:"B", D:"C", E:"D", F:"E" };
+      const NEXT = { B:"C", C:"D", D:"E", E:"F" };
+      const m = {};
+      ["B","C","D","E"].forEach(c => { m[`${c}1`] = `=${NEXT[c]}1-1`; });
+      DCOLS.forEach(c => {
+        const p = PREV[c];
+        m[`${c}4`]  = `=${c}3/${c}2`;
+        m[`${c}14`] = `=${c}13-${p}13`;
+        m[`${c}17`] = `=${c}6+${c}7+${c}8-${c}14-${c}15`;
+        m[`${c}18`] = `=${c}17+${c}19`;
+        m[`${c}21`] = `=${c}17/${c}4`;
+        m[`${c}22`] = `=${c}18/${c}4`;
+        m[`${c}23`] = `=ABS(${c}19)/${c}4`;
+        m[`${c}25`] = `=${c}21/${c}$32`;
+        m[`${c}26`] = `=${c}22/${c}$32`;
+        m[`${c}27`] = `=${c}23/${c}$32`;
+        m[`${c}32`] = `=AVERAGE(${c}30:${c}31)`;
+      });
+      COLS.forEach(c => {
+        m[`${c}13`] = `=${c}10+${c}11-${c}12`;
+        m[`${c}29`] = `=${c}1-1`;
+      });
+      m.D34 = "=F21/B34";  m.F34 = "=F22/B34";
+      m.D35 = "=F23/B34";
+      m.F35 = "=(F32-C32)/SUM(C22:F22)";
+      m.B35 = "=NPV(AVERAGE(C26:F26)*150%,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^1,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^2,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^3,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^4,(AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^5)+((AVERAGE(C21:F21)*(1+AVERAGE(C26:F26))^5)*(1/AVERAGE(C25:F25))))";
+      return m;
+    })();
+
+    function getFormula(cr, data) {
+      if (!cr) return "";
+      const row = parseInt(cr.slice(1));
+      if (LTXT.has(cr))    return LTXT_V[cr];
+      if (FRZ.has(cr))     return "";
+      if (BLANKS.has(row)) return "";
+      if (cr[0] === "A")   return RLBL[row] || "";
+      if (FDS[cr])         return FDS[cr];
+      if (INP.has(cr))     return String(data[cr] ?? "");
+      return "";
+    }
+
+    const a4  = (a, b, c, d) => (a + b + c + d) / 4;
+    const EPS = 0.005;
+
+    function outStyle(cr, data) {
+      const grn = { bg:C.outGreen, fg:C.outGreenFg };
+      const red = { bg:C.outRed,   fg:C.outRedFg   };
+      const neu = { bg:C.formula,  fg:C.formulaFg  };
+      const cmp = (lat, avg) => {
+        if (lat==null||isNaN(lat)) return neu;
+        return lat > avg*(1+EPS) ? grn : lat < avg*(1-EPS) ? red : neu;
+      };
+      if (cr==="B35") {
+        const fv=data.B35, b34=data.B34;
+        return (fv==null||isNaN(fv)||b34==null) ? grn : b34<=fv ? grn : red;
+      }
+      if (cr==="D34") return cmp(data.D34, a4(data.C25,data.D25,data.E25,data.F25));
+      if (cr==="F34") return cmp(data.F34, a4(data.C26,data.D26,data.E26,data.F26));
+      if (cr==="D35") return cmp(data.D35, a4(data.C27,data.D27,data.E27,data.F27));
+      if (cr==="F35") { const v=data.F35; return (v==null||isNaN(v)) ? neu : v>1.001 ? grn : v<0.999 ? red : neu; }
+      return grn;
+    }
+
+    const DEFS = {};
+
+    function calc(inp, mult=150, mcapex=75) {
+      const v = { ...inp };
+      v.E1=v.F1-1; v.D1=v.E1-1; v.C1=v.D1-1; v.B1=v.C1-1;
+      DCOLS.forEach(c => { v[`${c}4`]=v[`${c}3`]/v[`${c}2`]; });
+      COLS.forEach(c  => { v[`${c}13`]=v[`${c}10`]+v[`${c}11`]-v[`${c}12`]; });
+      WC_PAIRS.forEach(([cu,pr]) => { v[`${cu}14`]=v[`${cu}13`]-v[`${pr}13`]; });
+      DCOLS.forEach(c => {
+        v[`${c}15`] = (mcapex/100)*v[`${c}7`];
+        v[`${c}17`] = v[`${c}6`]+v[`${c}7`]+v[`${c}8`]-v[`${c}14`]-v[`${c}15`];
+        v[`${c}18`] = v[`${c}17`]+v[`${c}19`];
+        v[`${c}21`] = v[`${c}17`]/v[`${c}4`];
+        v[`${c}22`] = v[`${c}18`]/v[`${c}4`];
+        v[`${c}23`] = Math.abs(v[`${c}19`])/v[`${c}4`];
+        v[`${c}32`] = (v[`${c}30`]+v[`${c}31`])/2;
+        v[`${c}25`] = v[`${c}21`]/v[`${c}32`];
+        v[`${c}26`] = v[`${c}22`]/v[`${c}32`];
+        v[`${c}27`] = v[`${c}23`]/v[`${c}32`];
+      });
+      COLS.forEach(c => { v[`${c}29`]=v[`${c}1`]-1; });
+      v.D34=v.F21/v.B34; v.F34=v.F22/v.B34;
+      v.D35=v.F23/v.B34;
+      v.F35=(v.F32-v.C32)/(v.C22+v.D22+v.E22+v.F22);
+      const aR  = a4(v.C26,v.D26,v.E26,v.F26);
+      const aD  = a4(v.C23,v.D23,v.E23,v.F23);
+      const aO  = a4(v.C21,v.D21,v.E21,v.F21);
+      const aOY = a4(v.C25,v.D25,v.E25,v.F25);
+      const r=aR*(mult/100), g=aR;
+      v.B35 = [1,2,3,4].reduce((s,i) => s + aD*(1+g)**i/(1+r)**i, 0)
+            + (aD*(1+g)**5 + aO*(1+g)**5/aOY) / (1+r)**5;
+      return v;
+    }
+
+    function parseN(s) {
+      const t = String(s).trim().replace(/,/g,"").replace(/%/g,"");
+      if (/^\([\d.]+\)$/.test(t)) return -parseFloat(t.slice(1,-1));
+      return parseFloat(t);
+    }
+
+    function RowLabel({row}) {
+      const lbl = RLBL[row] || "";
+      const idx  = lbl.indexOf(" · in crores");
+      if (idx === -1) return lbl;
+      return <>{lbl.slice(0, idx)}<span style={{color:C.border}}>{lbl.slice(idx)}</span></>;
+    }
+
+    const TH_BASE = {
+      padding:`${CP.v}px ${CP.h}px`,
+      background:C.colHdr, color:C.colHdrFg,
+      fontWeight:600, fontSize:11,
+      borderRight:`1px solid ${C.border}`,
+      borderBottom:`1px solid ${C.border}`,
+      userSelect:"none", whiteSpace:"nowrap",
+      height:G.rowH, boxSizing:"border-box", textAlign:"center",
+    };
+
+    function App() {
+      const [inp,    setInp]    = useState(DEFS);
+      const [sel,    setSel]    = useState(null);
+      const [mult,   setMult]   = useState(150);
+      const [mcapex, setMcapex] = useState(75);
+      const data = useMemo(() => calc(inp, mult, mcapex), [inp, mult, mcapex]);
+
+      const upd = (cr, n) => { if (!isNaN(n)) setInp(p => ({ ...p, [cr]: n })); };
+
+      const doPaste = (e, startCr) => {
+        const txt = e.clipboardData.getData("text");
+        const rows = txt.trim().split(/\r?\n/);
+        if (rows.length <= 1 && !rows[0].includes("\t")) return;
+        e.preventDefault();
+        const sc = COLS.indexOf(startCr[0]), sr = parseInt(startCr.slice(1));
+        const ni = { ...inp };
+        rows.forEach((row, ri) => {
+          row.split("\t").forEach((cell, ci) => {
+            const cr = `${COLS[sc+ci]}${sr+ri}`;
+            if (INP.has(cr)) { const n=parseN(cell); if (!isNaN(n)) ni[cr]=n; }
+          });
+        });
+        setInp(ni);
+      };
+
+      useEffect(() => {
+        const onKey = e => {
+          if (!sel) return;
+          if (!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) return;
+          if (document.activeElement?.tagName === "INPUT") return;
+          e.preventDefault();
+          const col=sel[0], row=parseInt(sel.slice(1)), ci=NAV.indexOf(col);
+          let nc=col, nr=row;
+          if (e.key==="ArrowRight") nc=NAV[Math.min(ci+1, NAV.length-1)];
+          if (e.key==="ArrowLeft")  nc=NAV[Math.max(ci-1, 0)];
+          if (e.key==="ArrowDown")  nr=Math.min(row+1, 35);
+          if (e.key==="ArrowUp")    nr=Math.max(row-1, 1);
+          if (nc!==col||nr!==row) setSel(`${nc}${nr}`);
+        };
+        window.addEventListener("keydown", onKey);
+        return () => window.removeEventListener("keydown", onKey);
+      }, [sel]);
+
+      const isDisabled = !!sel && (FRZ.has(sel) || sel[0]==="A" || BLANKS.has(parseInt(sel.slice(1))));
+
+      return (
+        <div style={{fontFamily:"'Inter',system-ui,sans-serif", background:C.page, width:TOTAL_W, fontSize:13}}>
+
+          <div style={{
+            background:C.hdr, color:"#fff",
+            display:"flex", alignItems:"center",
+            padding:"0 14px", height:G.headerH, boxSizing:"border-box",
+          }}>
+            <span style={{fontSize:17, fontWeight:700, letterSpacing:"-0.4px"}}>Buffett Lens</span>
+          </div>
+
+          <div style={{
+            background: isDisabled ? C.labelCol : "#fff",
+            borderBottom:`1px solid ${C.border}`,
+            display:"flex", alignItems:"center",
+            height:G.fbarH, transition:"background 0.15s",
+          }}>
+            <div style={{
+              width:60, flexShrink:0, borderRight:`1px solid ${C.border}`,
+              height:"100%", display:"flex", alignItems:"center",
+              padding:`0 ${CP.h}px`, fontWeight:700, fontSize:12,
+              color: isDisabled ? "#aaa" : "#444",
+            }}>{sel || ""}</div>
+            <div style={{
+              width:30, flexShrink:0, borderRight:`1px solid ${C.border}`,
+              height:"100%", display:"flex", alignItems:"center", justifyContent:"center",
+              color:"#bbb", fontSize:14, fontStyle:"italic", userSelect:"none",
+            }}>fx</div>
+            <div style={{
+              flex:1, height:"100%",
+              display:"flex", alignItems:"center",
+              padding:`0 ${CP.h}px`,
+              color: isDisabled ? "#aaa" : "#222",
+              fontSize:12, lineHeight:1,
+              overflowX:"auto", whiteSpace:"nowrap",
+              boxSizing:"border-box",
+            }}>
+              {isDisabled
+                ? getFormula(sel, data)
+                : sel === "B35"
+                  ? <B35FormulaBar mult={mult} setMult={setMult} />
+                  : MCAPEX_CELLS.has(sel)
+                    ? <McapexFormulaBar mcapex={mcapex} setMcapex={setMcapex} col={sel[0]} />
+                    : sel ? getFormula(sel, data) : ""
+              }
+            </div>
+          </div>
+
+          <div style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
+            <Sheet data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+          </div>
+        </div>
+      );
+    }
+
+    function Sheet({data, inp, sel, setSel, upd, doPaste}) {
+      const blankStyle = cr => ({
+        background:"#ffffff",
+        borderRight:`1px solid ${C.border}`,
+        borderBottom:`1px solid ${C.border}`,
+        boxShadow: sel===cr ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+        height:G.blankH, boxSizing:"border-box", padding:0, cursor:"pointer",
+      });
+
+      return (
+        <table style={{borderCollapse:"separate", borderSpacing:0, tableLayout:"fixed", whiteSpace:"nowrap"}}>
+          <colgroup>
+            <col style={{width:G.rowNum, minWidth:G.rowNum}} />
+            <col style={{width:G.colA,   minWidth:G.colA}} />
+            {COLS.map(c => <col key={c} style={{width:G.col, minWidth:G.col}} />)}
+          </colgroup>
+          <thead>
+            <tr>
+              <th style={TH_BASE} />
+              <th style={TH_BASE}>A</th>
+              {COLS.map(c => <th key={c} style={TH_BASE}>{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {ALL_ROWS.map(r => {
+              if (BLANKS.has(r)) return (
+                <tr key={r}>
+                  <td style={{background:"#ffffff", borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, height:G.blankH, boxSizing:"border-box", padding:0}} />
+                  <td style={blankStyle(`A${r}`)} onClick={() => setSel(`A${r}`)} />
+                  {COLS.map(col => <td key={col} style={blankStyle(`${col}${r}`)} onClick={() => setSel(`${col}${r}`)} />)}
+                </tr>
+              );
+              return (
+                <SheetRow key={r} row={r} data={data} inp={inp}
+                  sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+              );
+            })}
+          </tbody>
+        </table>
+      );
+    }
+
+    function SheetRow({row, data, inp, sel, setSel, upd, doPaste}) {
+      return (
+        <tr>
+          <td style={{
+            background:C.rowNum, color:C.rowNumFg,
+            fontSize:11, fontWeight:500, textAlign:"center",
+            padding:`${CP.v}px ${CP.h}px`,
+            borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
+            height:G.rowH, boxSizing:"border-box", userSelect:"none",
+          }}>{row}</td>
+
+          <td onClick={() => setSel(`A${row}`)} style={{
+            background:C.labelCol, color:C.labelFg,
+            fontSize:12, fontWeight:500,
+            padding:`${CP.v}px ${CP.h}px`,
+            borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
+            overflow:"hidden", textOverflow:"ellipsis",
+            height:G.rowH, boxSizing:"border-box", userSelect:"none", cursor:"pointer",
+            boxShadow: sel===`A${row}` ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+          }}>
+            <RowLabel row={row} />
+          </td>
+
+          {COLS.map(col => (
+            <GridCell key={col} cr={`${col}${row}`}
+              data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+          ))}
+        </tr>
+      );
+    }
+
+    function GridCell({cr, data, inp, sel, setSel, upd, doPaste}) {
+      const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
+      const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
+      const isSel  = sel===cr;
+
+      let bg, fg, fw=400, ta="right";
+      if      (isFrz)  { bg=C.frozen;   fg=C.frozenFg; }
+      else if (isBlue) { bg=C.blueCell; fg=C.blueCellFg; fw=600; }
+      else if (isOut)  { const os=outStyle(cr,data); bg=os.bg; fg=os.fg; fw=600; }
+      else if (isInp)  { bg=isSel?C.selBg:C.input; fg=C.inputFg; }
+      else if (isLtxt) { bg=C.ltxt; fg=C.ltxtFg; ta="left"; fw=500; }
+      else             { bg=isSel?C.selBg:C.formula; fg=C.formulaFg; }
+
+      const tdBase = {
+        borderRight:`1px solid ${C.border}`,
+        borderBottom:`1px solid ${C.border}`,
+        boxShadow: isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+        fontSize:12, fontWeight:fw, textAlign:ta, color:fg,
+        height:G.rowH, boxSizing:"border-box",
+        overflow:"hidden", verticalAlign:"middle",
+      };
+
+      if (isInp) return (
+        <td style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
+          onClick={() => setSel(cr)}>
+          <ICell cr={cr} rawVal={inp[cr]??0} isBlue={isBlue}
+            fg={isBlue?C.blueCellFg:C.inputFg}
+            bg={isBlue?C.blueCell:isSel?C.selBg:C.input}
+            upd={upd} doPaste={doPaste} onFocus={() => setSel(cr)} />
+        </td>
+      );
+
+      return (
+        <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
+          onClick={() => setSel(cr)}>
+          {isFrz ? null : isLtxt ? LTXT_V[cr] : fmtCell(cr, data[cr])}
+        </td>
+      );
+    }
+
+    function ICell({cr, rawVal, isBlue, fg, bg, upd, doPaste, onFocus}) {
+      const [focused, setFocused] = useState(false);
+      const [draft,   setDraft]   = useState("");
+      const ref       = useRef(null);
+      const cancelled = useRef(false);
+      return (
+        <input ref={ref}
+          value={focused ? draft : fmtCell(cr, rawVal)}
+          onFocus={() => { setFocused(true); setDraft(String(rawVal??"")); onFocus(); }}
+          onBlur={() => {
+            setFocused(false);
+            if (!cancelled.current) { const n=parseN(draft); if (!isNaN(n)) upd(cr,n); }
+            cancelled.current = false;
+          }}
+          onChange={e => setDraft(e.target.value)}
+          onPaste={e => {
+            const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
+            if (lines.length>1||lines[0].includes("\t")) doPaste(e,cr);
+          }}
+          onKeyDown={e => {
+            if (e.key==="Enter"||e.key==="Tab") { e.preventDefault(); ref.current.blur(); }
+            if (e.key==="Escape") { cancelled.current=true; ref.current.blur(); }
+          }}
+          style={{
+            width:"100%", height:"100%", border:"none", outline:"none",
+            background:bg, color:fg, textAlign:"right",
+            padding:`${CP.v}px ${CP.h}px`,
+            fontSize:12, fontWeight:isBlue?600:400,
+            boxSizing:"border-box", cursor:"text",
+            fontFamily:"'Inter',system-ui,sans-serif",
+          }}
+        />
+      );
+    }
+
+    function EditableNum({value, onChange, validate}) {
+      const [draft, setDraft] = useState(String(value));
+      const ref       = useRef(null);
+      const cancelled = useRef(false);
+
+      useEffect(() => {
+        if (document.activeElement !== ref.current) setDraft(String(value));
+      }, [value]);
+
+      const commit = () => {
+        if (!cancelled.current) {
+          const n = parseInt(draft);
+          if (!isNaN(n) && n > 0 && (!validate || validate(n))) onChange(n);
+          else setDraft(String(value));
+        }
+        cancelled.current = false;
+      };
+      return (
+        <input ref={ref}
+          value={draft}
+          onChange={e => setDraft(e.target.value.replace(/\D/g,""))}
+          onBlur={commit}
+          onKeyDown={e => {
+            if (e.key==="Enter")  { ref.current.blur(); }
+            if (e.key==="Escape") { cancelled.current=true; ref.current.blur(); }
+          }}
+          style={{
+            width:`${Math.max(draft.length,1)}ch`,
+            border:"none", outline:"none", background:"transparent",
+            fontSize:12, color:C.blueCell, fontWeight:700,
+            padding:0, margin:0, textAlign:"center",
+            verticalAlign:"baseline", display:"inline",
+            fontFamily:"'Inter',system-ui,sans-serif",
+          }}
+        />
+      );
+    }
+
+    const B35_PRE = "=NPV(AVERAGE(C26:F26)*";
+    const B35_SUF = "%,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^1,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^2,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^3,AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^4,(AVERAGE(C23:F23)*(1+AVERAGE(C26:F26))^5)+((AVERAGE(C21:F21)*(1+AVERAGE(C26:F26))^5)*(1/AVERAGE(C25:F25))))";
+
+    function B35FormulaBar({mult, setMult}) {
+      return (
+        <span style={{fontSize:12, color:"#222", whiteSpace:"nowrap"}}>
+          {B35_PRE}
+          <EditableNum value={mult} onChange={setMult} />
+          {B35_SUF}
+        </span>
+      );
+    }
+
+    function McapexFormulaBar({mcapex, setMcapex, col}) {
+      return (
+        <span style={{fontSize:12, color:"#222", whiteSpace:"nowrap"}}>
+          {"="}
+          <EditableNum value={mcapex} onChange={setMcapex} validate={n => n <= 100} />
+          {"%*" + col + "7"}
+        </span>
+      );
+    }
+
+    const root = ReactDOM.createRoot(document.getElementById("root"));
+    root.render(<App />);
+  </script>
+</body>
+</html>
