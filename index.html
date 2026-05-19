@@ -147,7 +147,7 @@
       if (BLANKS.has(row)) return "";
       if (cr[0] === "A")   return RLBL[row] || "";
       if (FDS[cr])         return FDS[cr];
-      if (INP.has(cr))     return String(data[cr] ?? "");
+      if (INP.has(cr))     return String(data[cr] ?? 0);
       return "";
     }
 
@@ -223,7 +223,7 @@
     const TH_BASE = {
       padding:`${CP.v}px ${CP.h}px`,
       background:C.colHdr, color:C.colHdrFg,
-      fontWeight:600, fontSize:11,
+      fontWeight:400, fontSize:11,
       borderRight:`1px solid ${C.border}`,
       borderBottom:`1px solid ${C.border}`,
       userSelect:"none", whiteSpace:"nowrap",
@@ -273,7 +273,12 @@
         return () => window.removeEventListener("keydown", onKey);
       }, [sel]);
 
-      const isDisabled = !!sel && (FRZ.has(sel) || sel[0]==="A" || BLANKS.has(parseInt(sel.slice(1))));
+      const isDisabled = !!sel && (
+        FRZ.has(sel) ||
+        sel[0] === "A" ||
+        BLANKS.has(parseInt(sel.slice(1))) ||
+        (!!FDS[sel] && !MCAPEX_CELLS.has(sel) && sel !== "B35")
+      );
 
       return (
         <div style={{fontFamily:"'Inter',system-ui,sans-serif", background:C.page, width:TOTAL_W, fontSize:13}}>
@@ -283,7 +288,17 @@
             display:"flex", alignItems:"center",
             padding:"0 14px", height:G.headerH, boxSizing:"border-box",
           }}>
-            <span style={{fontSize:17, fontWeight:700, letterSpacing:"-0.4px"}}>Buffett Lens</span>
+            <span style={{fontSize:17, fontWeight:700, letterSpacing:"-0.4px", flex:1}}>Buffett Lens</span>
+              <div style={{display:"flex", gap:8}}>
+                {[["https://www.screener.in/","ti-database","Data"],["https://www.tradingview.com/chart/Fuy7YZyx/","ti-chart-line","Price"]].map(([href,icon,label]) => (
+                  <a key={label} href={href} target="_blank" rel="noreferrer" style={{
+                    textDecoration:"none", color:"#fff",
+                    border:"1.5px solid rgba(255,255,255,0.55)", borderRadius:999,
+                    padding:"4px 13px", fontSize:12, fontWeight:500,
+                    display:"flex", alignItems:"center", gap:5, cursor:"pointer",
+                  }}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:13}} />{label}</a>
+                ))}
+              </div>
           </div>
 
           <div style={{
@@ -350,8 +365,8 @@
           <thead>
             <tr>
               <th style={TH_BASE} />
-              <th style={TH_BASE}>A</th>
-              {COLS.map(c => <th key={c} style={TH_BASE}>{c}</th>)}
+              <th style={{...TH_BASE, fontWeight:sel&&sel[0]==="A"?700:400}}>A</th>
+              {COLS.map(c => <th key={c} style={{...TH_BASE, fontWeight:sel&&sel[0]===c?700:400}}>{c}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -378,7 +393,7 @@
         <tr>
           <td style={{
             background:C.rowNum, color:C.rowNumFg,
-            fontSize:11, fontWeight:500, textAlign:"center",
+            fontSize:11, fontWeight:sel&&parseInt(sel.slice(1))===row?700:400, textAlign:"center",
             padding:`${CP.v}px ${CP.h}px`,
             borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
             height:G.rowH, boxSizing:"border-box", userSelect:"none",
