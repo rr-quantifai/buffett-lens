@@ -258,8 +258,11 @@
 
       useEffect(() => {
         if (!sel) return;
-        const el = document.querySelector(`[data-cr="${sel}"]`);
-        if (el) el.scrollIntoView({block:"nearest", inline:"nearest"});
+        const id = setTimeout(() => {
+          const el = document.querySelector(`[data-cr="${sel}"]`);
+          if (el) el.scrollIntoView({block:"nearest", inline:"nearest"});
+        }, 0);
+        return () => clearTimeout(id);
       }, [sel]);
 
       useEffect(() => {
