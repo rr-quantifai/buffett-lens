@@ -257,6 +257,12 @@
       };
 
       useEffect(() => {
+        if (!sel) return;
+        const el = document.querySelector(`[data-cr="${sel}"]`);
+        if (el) el.scrollIntoView({block:"nearest", inline:"nearest"});
+      }, [sel]);
+
+      useEffect(() => {
         const onKey = e => {
           if (!sel) return;
           if (!["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) return;
@@ -443,9 +449,9 @@
       };
 
       if (isInp) return (
-        <td style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
+        <td data-cr={cr} style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
           onClick={() => setSel(cr)}>
-          <ICell cr={cr} rawVal={inp[cr]??0} isBlue={isBlue}
+          <ICell cr={cr} rawVal={inp[cr]??0} isSel={isSel} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
             bg={isBlue?C.blueCell:C.input}
             upd={upd} doPaste={doPaste} onFocus={() => setSel(cr)} />
@@ -453,14 +459,14 @@
       );
 
       return (
-        <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
+        <td data-cr={cr} style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
           onClick={() => setSel(cr)}>
           {isFrz ? null : isLtxt ? LTXT_V[cr] : fmtCell(cr, data[cr])}
         </td>
       );
     }
 
-    function ICell({cr, rawVal, isBlue, fg, bg, upd, doPaste, onFocus}) {
+    function ICell({cr, rawVal, isSel, isBlue, fg, bg, upd, doPaste, onFocus}) {
       const [focused, setFocused] = useState(false);
       const [draft,   setDraft]   = useState("");
       const ref       = useRef(null);
@@ -490,6 +496,7 @@
             fontSize:12, fontWeight:isBlue?600:400,
             boxSizing:"border-box", cursor:"text",
             fontFamily:"'Inter',system-ui,sans-serif",
+            boxShadow:isSel?`inset 0 0 0 2px ${C.selBorder}`:"none",
           }}
         />
       );
