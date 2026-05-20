@@ -259,16 +259,13 @@
 
       useEffect(() => {
         if (!sel || !scrollRef.current) return;
-        const id = setTimeout(() => {
-          const container = scrollRef.current;
-          const el = container.querySelector(`[data-cr="${sel}"]`);
-          if (!el) return;
-          const cr = container.getBoundingClientRect();
-          const er = el.getBoundingClientRect();
-          if (er.top < cr.top) container.scrollTop -= cr.top - er.top;
-          else if (er.bottom > cr.bottom) container.scrollTop += er.bottom - cr.bottom;
-        }, 0);
-        return () => clearTimeout(id);
+        const row = parseInt(sel.slice(1));
+        let top = G.rowH;
+        for (let r = 1; r < row; r++) top += BLANKS.has(r) ? G.blankH : G.rowH;
+        const h = BLANKS.has(row) ? G.blankH : G.rowH;
+        const c = scrollRef.current;
+        if (top < c.scrollTop) c.scrollTop = top;
+        else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel]);
 
       useEffect(() => {
