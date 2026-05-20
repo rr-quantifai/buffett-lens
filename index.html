@@ -264,7 +264,7 @@
         for (let r = 1; r < row; r++) top += BLANKS.has(r) ? G.blankH : G.rowH;
         const h = BLANKS.has(row) ? G.blankH : G.rowH;
         const c = scrollRef.current;
-        if (top < c.scrollTop) c.scrollTop = Math.max(0, top - G.rowH);
+        if (top - G.rowH < c.scrollTop) c.scrollTop = Math.max(0, top - G.rowH);
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel]);
 
