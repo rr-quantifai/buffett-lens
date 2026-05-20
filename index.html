@@ -232,6 +232,7 @@
     };
 
     function App() {
+      const scrollRef = useRef(null);
       const [inp,    setInp]    = useState(DEFS);
       const [sel,    setSel]    = useState(null);
       const [mult,   setMult]   = useState(150);
@@ -257,10 +258,15 @@
       };
 
       useEffect(() => {
-        if (!sel) return;
+        if (!sel || !scrollRef.current) return;
         const id = setTimeout(() => {
-          const el = document.querySelector(`[data-cr="${sel}"]`);
-          if (el) el.scrollIntoView({block:"nearest", inline:"nearest"});
+          const container = scrollRef.current;
+          const el = container.querySelector(`[data-cr="${sel}"]`);
+          if (!el) return;
+          const cr = container.getBoundingClientRect();
+          const er = el.getBoundingClientRect();
+          if (er.top < cr.top) container.scrollTop -= cr.top - er.top;
+          else if (er.bottom > cr.bottom) container.scrollTop += er.bottom - cr.bottom;
         }, 0);
         return () => clearTimeout(id);
       }, [sel]);
@@ -349,7 +355,7 @@
             </div>
           </div>
 
-          <div style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
+          <div ref={scrollRef} style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
             <Sheet data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
           </div>
         </div>
