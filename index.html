@@ -302,16 +302,16 @@
             padding:"0 14px", height:G.headerH, boxSizing:"border-box",
           }}>
             <span style={{fontSize:17, fontWeight:700, letterSpacing:"-0.4px", flex:1}}>Buffett Lens</span>
-              <div style={{display:"flex", gap:8}}>
-                {[["https://www.screener.in/","ti-database","Data"],["https://www.tradingview.com/chart/Fuy7YZyx/","ti-chart-line","Price"]].map(([href,icon,label]) => (
-                  <a key={label} href={href} target="_blank" rel="noreferrer" style={{
-                    textDecoration:"none", color:"#fff",
-                    border:"1.5px solid rgba(255,255,255,0.55)", borderRadius:999,
-                    padding:"4px 13px", fontSize:12, fontWeight:500,
-                    display:"flex", alignItems:"center", gap:5, cursor:"pointer",
-                  }}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:13}} />{label}</a>
-                ))}
-              </div>
+            <div style={{display:"flex", gap:8}}>
+              {[["https://www.screener.in/","ti-database","Data"],["https://www.tradingview.com/chart/Fuy7YZyx/","ti-chart-line","Price"]].map(([href,icon,label]) => (
+                <a key={label} href={href} target="_blank" rel="noreferrer" style={{
+                  textDecoration:"none", color:"#fff",
+                  border:"1.5px solid rgba(255,255,255,0.55)", borderRadius:999,
+                  padding:"4px 13px", fontSize:12, fontWeight:500,
+                  display:"flex", alignItems:"center", gap:5, cursor:"pointer",
+                }}><i className={`ti ${icon}`} aria-hidden="true" style={{fontSize:13}} />{label}</a>
+              ))}
+            </div>
           </div>
 
           <div style={{
@@ -455,7 +455,7 @@
       };
 
       if (isInp) return (
-        <td data-cr={cr} style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
+        <td style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
           onClick={() => setSel(cr)}>
           <ICell cr={cr} rawVal={inp[cr]??0} isSel={isSel} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
@@ -465,7 +465,7 @@
       );
 
       return (
-        <td data-cr={cr} style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
+        <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
           onClick={() => setSel(cr)}>
           {isFrz ? null : isLtxt ? LTXT_V[cr] : fmtCell(cr, data[cr])}
         </td>
