@@ -234,7 +234,7 @@
     function App() {
       const scrollRef = useRef(null);
       const [inp,    setInp]    = useState(DEFS);
-      const [sel,    setSel]    = useState(null);
+      const [sel,    setSel]    = useState("A1");
       const [mult,   setMult]   = useState(150);
       const [mcapex, setMcapex] = useState(75);
       const data = useMemo(() => calc(inp, mult, mcapex), [inp, mult, mcapex]);
@@ -264,7 +264,7 @@
         for (let r = 1; r < row; r++) top += BLANKS.has(r) ? G.blankH : G.rowH;
         const h = BLANKS.has(row) ? G.blankH : G.rowH;
         const c = scrollRef.current;
-        if (top < c.scrollTop) c.scrollTop = top;
+        if (top < c.scrollTop) c.scrollTop = Math.max(0, top - G.rowH);
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel]);
 
