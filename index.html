@@ -366,8 +366,8 @@
           <thead>
             <tr>
               <th style={TH_BASE} />
-              <th style={{...TH_BASE, fontWeight:sel&&sel[0]==="A"?700:400}}>A</th>
-              {COLS.map(c => <th key={c} style={{...TH_BASE, fontWeight:sel&&sel[0]===c?700:400}}>{c}</th>)}
+              <th style={{...TH_BASE, fontWeight:sel&&sel[0]==="A"?700:400,background:sel&&sel[0]==="A"?C.selBg:C.colHdr}}>A</th>
+              {COLS.map(c => <th key={c} style={{...TH_BASE, fontWeight:sel&&sel[0]===c?700:400,background:sel&&sel[0]===c?C.selBg:C.colHdr}}>{c}</th>)}
             </tr>
           </thead>
           <tbody>
@@ -393,7 +393,7 @@
       return (
         <tr>
           <td style={{
-            background:C.rowNum, color:C.rowNumFg,
+            background:sel&&parseInt(sel.slice(1))===row?C.selBg:C.rowNum, color:C.rowNumFg,
             fontSize:11, fontWeight:sel&&parseInt(sel.slice(1))===row?700:400, textAlign:"center",
             padding:`${CP.v}px ${CP.h}px`,
             borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
@@ -429,9 +429,9 @@
       if      (isFrz)  { bg=C.frozen;   fg=C.frozenFg; }
       else if (isBlue) { bg=C.blueCell; fg=C.blueCellFg; fw=600; }
       else if (isOut)  { const os=outStyle(cr,data); bg=os.bg; fg=os.fg; fw=600; }
-      else if (isInp)  { bg=isSel?C.selBg:C.input; fg=C.inputFg; }
+      else if (isInp)  { bg=C.input; fg=C.inputFg; }
       else if (isLtxt) { bg=C.ltxt; fg=C.ltxtFg; ta="left"; fw=500; }
-      else             { bg=isSel?C.selBg:C.formula; fg=C.formulaFg; }
+      else             { bg=C.formula; fg=C.formulaFg; }
 
       const tdBase = {
         borderRight:`1px solid ${C.border}`,
@@ -447,7 +447,7 @@
           onClick={() => setSel(cr)}>
           <ICell cr={cr} rawVal={inp[cr]??0} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
-            bg={isBlue?C.blueCell:isSel?C.selBg:C.input}
+            bg={isBlue?C.blueCell:C.input}
             upd={upd} doPaste={doPaste} onFocus={() => setSel(cr)} />
         </td>
       );
