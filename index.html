@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Buffett Lens I Stock analysis tool</title>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #f0f0f0; }
@@ -294,7 +297,7 @@
       );
 
       return (
-        <div style={{fontFamily:"'Inter',system-ui,sans-serif", background:C.page, width:TOTAL_W, fontSize:13}}>
+        <div style={{fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif", background:C.page, width:TOTAL_W, fontSize:13}}>
 
           <div style={{
             background:C.hdr, color:"#fff",
@@ -501,7 +504,7 @@
             padding:`${CP.v}px ${CP.h}px`,
             fontSize:12, fontWeight:isBlue?600:400,
             boxSizing:"border-box", cursor:"text",
-            fontFamily:"'Inter',system-ui,sans-serif",
+            fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
             boxShadow:isSel?`inset 0 0 0 2px ${C.selBorder}`:"none",
           }}
         />
@@ -540,7 +543,7 @@
             fontSize:12, color:C.blueCell, fontWeight:700,
             padding:0, margin:0, textAlign:"center",
             verticalAlign:"baseline", display:"inline",
-            fontFamily:"'Inter',system-ui,sans-serif",
+            fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
           }}
         />
       );
