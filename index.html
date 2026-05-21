@@ -236,6 +236,7 @@
 
     function App() {
       const scrollRef = useRef(null);
+      const focusMode = useRef("mouse");
       const [inp,    setInp]    = useState(DEFS);
       const [sel,    setSel]    = useState("A1");
       const [mult,   setMult]   = useState(150);
@@ -283,7 +284,7 @@
           if (e.key==="ArrowLeft")  nc=NAV[Math.max(ci-1, 0)];
           if (e.key==="ArrowDown")  nr=Math.min(row+1, 35);
           if (e.key==="ArrowUp")    nr=Math.max(row-1, 1);
-          if (nc!==col||nr!==row) setSel(`${nc}${nr}`);
+          if (nc!==col||nr!==row) { focusMode.current="keyboard"; setSel(`${nc}${nr}`); }
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
@@ -356,13 +357,13 @@
           </div>
 
           <div ref={scrollRef} style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
-            <Sheet data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+            <Sheet data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} focusMode={focusMode} />
           </div>
         </div>
       );
     }
 
-    function Sheet({data, inp, sel, setSel, upd, doPaste}) {
+    function Sheet({data, inp, sel, setSel, upd, doPaste, focusMode}) {
       const blankStyle = cr => ({
         background:"#ffffff",
         borderRight:`1px solid ${C.border}`,
@@ -396,7 +397,7 @@
               );
               return (
                 <SheetRow key={r} row={r} data={data} inp={inp}
-                  sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+                  sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} focusMode={focusMode} />
               );
             })}
           </tbody>
@@ -404,7 +405,7 @@
       );
     }
 
-    function SheetRow({row, data, inp, sel, setSel, upd, doPaste}) {
+    function SheetRow({row, data, inp, sel, setSel, upd, doPaste, focusMode}) {
       return (
         <tr>
           <td style={{
@@ -429,13 +430,13 @@
 
           {COLS.map(col => (
             <GridCell key={col} cr={`${col}${row}`}
-              data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} />
+              data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} doPaste={doPaste} focusMode={focusMode} />
           ))}
         </tr>
       );
     }
 
-    function GridCell({cr, data, inp, sel, setSel, upd, doPaste}) {
+    function GridCell({cr, data, inp, sel, setSel, upd, doPaste, focusMode}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
       const isSel  = sel===cr;
@@ -463,7 +464,8 @@
           <ICell cr={cr} rawVal={inp[cr]??0} isSel={isSel} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
             bg={isBlue?C.blueCell:C.input}
-            upd={upd} doPaste={doPaste} onFocus={() => setSel(cr)} />
+            upd={upd} doPaste={doPaste} focusMode={focusMode}
+            onFocus={() => setSel(cr)} />
         </td>
       );
 
@@ -475,15 +477,22 @@
       );
     }
 
-    function ICell({cr, rawVal, isSel, isBlue, fg, bg, upd, doPaste, onFocus}) {
+    function ICell({cr, rawVal, isSel, isBlue, fg, bg, upd, doPaste, onFocus, focusMode}) {
       const [focused, setFocused] = useState(false);
       const [draft,   setDraft]   = useState("");
       const ref       = useRef(null);
       const cancelled = useRef(false);
+      useEffect(() => {
+        if (isSel && focusMode.current==="keyboard" && ref.current) {
+          ref.current.focus();
+        }
+      }, [isSel]);
       return (
         <input ref={ref}
           value={focused ? draft : fmtCell(cr, rawVal)}
-          onFocus={() => { setFocused(true); setDraft(String(rawVal??"")); onFocus(); }}
+          onClick={() => { focusMode.current="mouse"; }}
+          onFocus={() => { setFocused(true); setDraft(String(rawVal??"")); onFocus();
+            if (focusMode.current==="keyboard") ref.current.setSelectionRange(0,0); }}
           onBlur={() => {
             setFocused(false);
             if (!cancelled.current) { const n=parseN(draft); if (!isNaN(n)) upd(cr,n); }
@@ -497,6 +506,11 @@
           onKeyDown={e => {
             if (e.key==="Enter"||e.key==="Tab") { e.preventDefault(); ref.current.blur(); }
             if (e.key==="Escape") { cancelled.current=true; ref.current.blur(); }
+            if (focusMode.current==="keyboard") {
+              if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) { cancelled.current=true; ref.current.blur(); return; }
+              if (e.key==="Delete"||e.key==="Backspace") { e.preventDefault(); setDraft(""); upd(cr,0); }
+              else if (e.key.length===1 && !e.ctrlKey && !e.metaKey) { setDraft(e.key); focusMode.current="mouse"; }
+            }
           }}
           style={{
             width:"100%", height:"100%", border:"none", outline:"none",
