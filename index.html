@@ -566,21 +566,16 @@
 
     function ICell({cr, rawVal, isSel, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, onExitEdit, onTab}) {
       const [draft, setDraft] = useState("");
-      const ref       = useRef(null);
-      const cancelled = useRef(false);
-      const modified  = useRef(false);
+      const ref      = useRef(null);
+      const modified = useRef(false);
 
-      // Focus/blur in sync with isEditing
       useEffect(() => {
         if (isEditing && ref.current) {
-          cancelled.current = false;
-          modified.current  = false;
           const sc = startCharRef.current;
           startCharRef.current = null;
-          // Pre-fill draft: typed char if entering via keypress, else current value
+          modified.current = sc !== null; // already modified if triggered by a keypress
           setDraft(sc !== null ? sc : (rawVal != null && !isNaN(rawVal) ? String(rawVal) : ""));
           ref.current.focus();
-          // Cursor at end after React paints
           setTimeout(() => {
             if (ref.current) {
               const len = ref.current.value.length;
@@ -593,13 +588,11 @@
       }, [isEditing]);
 
       const commit = () => {
-        if (cancelled.current) { cancelled.current = false; return; }
         if (!modified.current) return;
         if (draft === "") clr(cr);
         else { const n = parseN(draft); if (!isNaN(n)) upd(cr, n); }
       };
 
-      // Display: show draft in edit mode, formatted value (or blank) otherwise
       const display = isEditing
         ? draft
         : (rawVal != null && !isNaN(rawVal) ? fmtCell(cr, rawVal) : "");
@@ -609,7 +602,7 @@
           ref={ref}
           value={display}
           readOnly={!isEditing}
-          onChange={e => { if (isEditing) { modified.current=true; setDraft(e.target.value); } }}
+          onChange={e => { if (isEditing) { modified.current = true; setDraft(e.target.value); } }}
           onBlur={commit}
           onPaste={e => {
             const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
@@ -617,9 +610,8 @@
           }}
           onKeyDown={e => {
             if (!isEditing) return;
-            if (e.key==="Enter")  { e.preventDefault(); commit(); onExitEdit(); }
-            if (e.key==="Escape") { e.preventDefault(); cancelled.current=true; onExitEdit(); }
-            if (e.key==="Tab")    { e.preventDefault(); commit(); onTab(); }
+            if (e.key==="Enter" || e.key==="Escape") { e.preventDefault(); commit(); onExitEdit(); }
+            if (e.key==="Tab") { e.preventDefault(); commit(); onTab(); }
           }}
           style={{
             width:"100%", height:"100%", border:"none", outline:"none",
@@ -632,7 +624,7 @@
             caretColor: isEditing ? "auto" : "transparent",
             userSelect: isEditing ? "auto" : "none",
             boxShadow: isEditing
-              ? `inset 0 0 0 2px ${C.selBorder}, inset 0 0 8px rgba(147,197,253,0.55)`
+              ? `inset 0 0 0 2px ${C.selBorder}, inset 0 0 0 6px #bfdbfe`
               : isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none",
           }}
         />
