@@ -540,7 +540,7 @@
 
       if (isInp) return (
         <td
-          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell"}}
+          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell", boxShadow:"none"}}
           onClick={() => { if (editMode && !isSel) exitEdit(); setSel(cr); }}
           onDoubleClick={() => { setSel(cr); startCharRef.current=null; setEditMode(true); }}>
           <ICell
@@ -568,11 +568,13 @@
       const [draft, setDraft] = useState("");
       const ref       = useRef(null);
       const cancelled = useRef(false);
+      const modified  = useRef(false);
 
       // Focus/blur in sync with isEditing
       useEffect(() => {
         if (isEditing && ref.current) {
           cancelled.current = false;
+          modified.current  = false;
           const sc = startCharRef.current;
           startCharRef.current = null;
           // Pre-fill draft: typed char if entering via keypress, else current value
@@ -592,6 +594,7 @@
 
       const commit = () => {
         if (cancelled.current) { cancelled.current = false; return; }
+        if (!modified.current) return;
         if (draft === "") clr(cr);
         else { const n = parseN(draft); if (!isNaN(n)) upd(cr, n); }
       };
@@ -606,7 +609,7 @@
           ref={ref}
           value={display}
           readOnly={!isEditing}
-          onChange={e => { if (isEditing) setDraft(e.target.value); }}
+          onChange={e => { if (isEditing) { modified.current=true; setDraft(e.target.value); } }}
           onBlur={commit}
           onPaste={e => {
             const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
@@ -628,6 +631,9 @@
             fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
             caretColor: isEditing ? "auto" : "transparent",
             userSelect: isEditing ? "auto" : "none",
+            boxShadow: isEditing
+              ? `inset 0 0 0 2px ${C.selBorder}, inset 0 0 8px rgba(147,197,253,0.55)`
+              : isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none",
           }}
         />
       );
