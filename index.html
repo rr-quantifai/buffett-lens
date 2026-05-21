@@ -177,7 +177,7 @@
       return grn;
     }
 
-    const DEFS = {};
+    const DEFS = Object.fromEntries([...INP].map(k => [k, 0]));
 
     function calc(inp, mult=150, mcapex=75) {
       const v = { ...inp };
