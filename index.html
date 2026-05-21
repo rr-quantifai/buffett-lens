@@ -523,11 +523,7 @@
       else             { bg=C.formula; fg=C.formulaFg; }
 
       // Selected: inset border only. Edit mode: inset border + inner glow.
-      const shadow = isEditing
-        ? `inset 0 0 0 2px ${C.selBorder}, inset 0 0 8px rgba(147,197,253,0.55)`
-        : isSel
-          ? `inset 0 0 0 2px ${C.selBorder}`
-          : "none";
+      const shadow = isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none";
 
       const tdBase = {
         borderRight:`1px solid ${C.border}`,
@@ -589,6 +585,7 @@
 
       const commit = () => {
         if (!modified.current) return;
+        modified.current = false;
         if (draft === "") clr(cr);
         else { const n = parseN(draft); if (!isNaN(n)) upd(cr, n); }
       };
