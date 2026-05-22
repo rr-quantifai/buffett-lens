@@ -319,6 +319,51 @@
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel, selEnd]);
 
+      // Global paste handler (select mode)
+      useEffect(() => {
+        const onPaste = e => {
+          if (editMode || !sel) return;
+          if (e.target && e.target.tagName === "INPUT") return;
+          const txt = e.clipboardData.getData("text");
+          if (!txt.trim()) return;
+          e.preventDefault();
+          const rows = txt.trim().split(/\r?\n/);
+          const isMulti = rows.length > 1 || rows[0].includes("\t");
+          if (isMulti) {
+            const sc0 = selEnd ? Math.min(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0])) : NAV.indexOf(sel[0]);
+            const sr0 = selEnd ? Math.min(parseInt(sel.slice(1)),parseInt(selEnd.slice(1))) : parseInt(sel.slice(1));
+            const startCol = NAV[sc0];
+            if (!COLS.includes(startCol)) return;
+            const sc = COLS.indexOf(startCol);
+            setInp(p => {
+              const n={...p};
+              rows.forEach((row,ri) => row.split("\t").forEach((cell,ci) => {
+                const cr=`${COLS[sc+ci]}${sr0+ri}`;
+                if (INP.has(cr)) { const v=parseN(cell); if (!isNaN(v)) n[cr]=v; }
+              }));
+              return n;
+            });
+          } else {
+            const v = parseN(txt.trim());
+            if (isNaN(v)) return;
+            setInp(p => {
+              const n={...p};
+              if (selEnd) {
+                NAV.forEach(c => ALL_ROWS.forEach(r => {
+                  const cr=`${c}${r}`;
+                  if (INP.has(cr) && inSelRange(cr,sel,selEnd)) n[cr]=v;
+                }));
+              } else {
+                if (INP.has(sel)) n[sel]=v;
+              }
+              return n;
+            });
+          }
+        };
+        window.addEventListener("paste", onPaste);
+        return () => window.removeEventListener("paste", onPaste);
+      }, [sel, editMode, selEnd]);
+
       // Global keyboard handler
       useEffect(() => {
         const onKey = e => {
@@ -581,9 +626,12 @@
     function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
-      const isSel    = sel === cr;
+      const isSel     = sel === cr;
       const isInRange = inSelRange(cr, sel, selEnd);
       const isEditing = isSel && editMode;
+      const cornerRow = selEnd ? Math.max(parseInt(sel.slice(1)),parseInt(selEnd.slice(1))) : parseInt(sel.slice(1));
+      const cornerCI  = selEnd ? Math.max(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0])) : NAV.indexOf(sel[0]);
+      const isCorner  = !!selEnd && isInRange && parseInt(cr.slice(1))===cornerRow && NAV.indexOf(cr[0])===cornerCI;
 
       let bg, fg, fw=400, ta="right";
       if      (isFrz)  { bg=C.frozen;   fg=C.frozenFg; }
@@ -595,6 +643,7 @@
 
       // Selected: thick border. Range: blue tint. Edit mode: handled in ICell.
       const shadow = isSel ? `inset 0 0 0 2px ${C.selBorder}` : isInRange ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none";
+      const dot = isCorner ? <div style={{position:"absolute",bottom:-4,right:-4,width:8,height:8,borderRadius:"50%",background:C.selBorder,zIndex:10,pointerEvents:"none"}} /> : null;
 
       const tdBase = {
         borderRight:`1px solid ${C.border}`,
@@ -607,7 +656,7 @@
 
       if (isInp) return (
         <td
-          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"pointer", boxShadow:"none"}}
+          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"pointer", boxShadow:"none", position:"relative", overflow:isCorner?"visible":"hidden"}}
           onClick={e => { if (editMode && !isSel) exitEdit(); handleSelect(cr, e.shiftKey); }}
           onDoubleClick={() => { explicitEditRef.current=true; handleSelect(cr); startCharRef.current=null; setEditMode(true); }}>
           <ICell
@@ -622,13 +671,15 @@
             onEnter={() => enterFromCell(cr)}
             onArrow={dir => navigateFromCell(cr, dir)}
           />
+          {dot}
         </td>
       );
 
       return (
-        <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
+        <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer", position:"relative", overflow:isCorner?"visible":"hidden"}}
           onClick={e => { if (editMode) exitEdit(); handleSelect(cr, e.shiftKey); }}>
           {isFrz ? null : isLtxt ? LTXT_V[cr] : fmtCell(cr, data[cr])}
+          {dot}
         </td>
       );
     }
