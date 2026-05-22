@@ -249,6 +249,10 @@
       const scrollRef    = useRef(null);
       const startCharRef    = useRef(null);  // char that triggered edit mode, or null
       const explicitEditRef = useRef(false); // true = Enter/dblclick, false = typed char
+      const dataRef      = useRef(data);
+      const inpRef       = useRef(inp);
+      dataRef.current = data;
+      inpRef.current  = inp;
       const [inp,      setInp]      = useState(DEFS);
       const [sel,      setSel]      = useState("A1");
       const [selEnd,   setSelEnd]   = useState(null);
@@ -323,7 +327,7 @@
       useEffect(() => {
         const onPaste = e => {
           if (editMode || !sel) return;
-          if (e.target && e.target.tagName === "INPUT") return;
+          if (e.target && e.target.tagName === "INPUT" && !e.target.readOnly) return;
           const txt = e.clipboardData.getData("text");
           if (!txt.trim()) return;
           e.preventDefault();
@@ -420,6 +424,33 @@
             return;
           }
 
+          if ((e.key==="c"||e.key==="C") && (e.metaKey||e.ctrlKey)) {
+            e.preventDefault();
+            const d=dataRef.current, i=inpRef.current;
+            const cv = cr => INP.has(cr)
+              ? (i[cr]!=null ? String(i[cr]) : "")
+              : (d[cr]!=null && !isNaN(d[cr]) ? fmtCell(cr,d[cr]) : "");
+            let txt;
+            if (selEnd) {
+              const r1=Math.min(parseInt(sel.slice(1)),parseInt(selEnd.slice(1)));
+              const r2=Math.max(parseInt(sel.slice(1)),parseInt(selEnd.slice(1)));
+              const ci1=Math.min(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0]));
+              const ci2=Math.max(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0]));
+              const lines=[];
+              for(let r=r1;r<=r2;r++){
+                if(BLANKS.has(r)) continue;
+                const cells=[];
+                for(let ci=ci1;ci<=ci2;ci++) cells.push(cv(`${NAV[ci]}${r}`));
+                lines.push(cells.join("\t"));
+              }
+              txt=lines.join("\n");
+            } else {
+              txt=cv(sel);
+            }
+            navigator.clipboard.writeText(txt).catch(()=>{});
+            return;
+          }
+
           // Keys below only apply to input cells
           if (!INP.has(sel)) return;
 
@@ -506,15 +537,26 @@
               height:"100%", display:"flex", alignItems:"center", justifyContent:"center",
               color:"#bbb", fontSize:14, fontStyle:"italic", userSelect:"none",
             }}>fx</div>
-            <div style={{
-              flex:1, height:"100%",
-              display:"flex", alignItems:"center",
-              padding:`0 ${CP.h}px`,
-              color: isDisabled ? "#aaa" : "#222",
-              fontSize:12, lineHeight:1,
-              overflowX:"auto", whiteSpace:"nowrap",
-              boxSizing:"border-box",
-            }}>
+            <div
+              style={{
+                flex:1, height:"100%",
+                display:"flex", alignItems:"center",
+                padding:`0 ${CP.h}px`,
+                color: isDisabled ? "#aaa" : "#222",
+                fontSize:12, lineHeight:1,
+                overflowX:"auto", whiteSpace:"nowrap",
+                boxSizing:"border-box",
+                cursor: INP.has(sel) && !editMode ? "text" : "default",
+              }}
+              onMouseDown={e => { if (e.target.tagName !== "INPUT") e.preventDefault(); }}
+              onClick={() => {
+                if (INP.has(sel) && !editMode) {
+                  startCharRef.current = null;
+                  explicitEditRef.current = true;
+                  setEditMode(true);
+                }
+              }}
+            >
               {isDisabled
                 ? getFormula(sel, data, inp)
                 : sel === "B35"
@@ -725,17 +767,11 @@
           readOnly={!isEditing}
           onChange={e => { if (isEditing) { modified.current = true; setDraft(e.target.value); } }}
           onBlur={commit}
-          onPaste={e => {
-            if (!isEditing) {
-              const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
-              if (lines.length>1||lines[0].includes("\t")) doPaste(e, cr);
-            }
-          }}
           onKeyDown={e => {
             if (!isEditing) return;
-            if (e.key==="Escape")    { e.preventDefault(); e.stopPropagation(); modified.current=false; onExitEdit(); }
-            if (e.key==="Enter")     { e.preventDefault(); e.stopPropagation(); commit(); onEnter(); }
-            if (e.key==="Tab")       { e.preventDefault(); e.stopPropagation(); commit(); onTab(); }
+            if (e.key==="Escape")    { e.preventDefault(); e.stopPropagation(); modified.current=false; if(ref.current)ref.current.setSelectionRange(0,0); onExitEdit(); }
+            if (e.key==="Enter")     { e.preventDefault(); e.stopPropagation(); if(ref.current)ref.current.setSelectionRange(0,0); commit(); onEnter(); }
+            if (e.key==="Tab")       { e.preventDefault(); e.stopPropagation(); if(ref.current)ref.current.setSelectionRange(0,0); commit(); onTab(); }
             if (!explicitEditRef.current && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
               e.preventDefault(); e.stopPropagation(); commit(); onArrow(e.key);
             }
