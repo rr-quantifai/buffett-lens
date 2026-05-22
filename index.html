@@ -260,8 +260,9 @@
       const [draft,    setDraft]    = useState("");
       const [mult,     setMult]     = useState(150);
       const [mcapex,   setMcapex]   = useState(75);
-      const fbarInputRef = useRef(null);
-      const fbarFocusRef = useRef(false);
+      const fbarInputRef  = useRef(null);
+      const fbarFocusRef  = useRef(false);
+      const fbarActionRef = useRef(null);
       const dataRef   = useRef(null);
       const inpRef    = useRef(null);
       const selRef    = useRef(null);
@@ -426,8 +427,7 @@
               setSel(`${sel[0]}${nr}`); setSelEnd(null);
               return;
             }
-            if (e.key === "Tab" && !e.defaultPrevented) {
-              // ICell handles Tab itself via onTab prop; this catches any edge case
+            if (e.key === "Tab") {
               e.preventDefault();
               setEditMode(false);
               const ci = NAV.indexOf(sel[0]);
@@ -625,22 +625,17 @@
                           value={draft}
                           onChange={e => setDraft(e.target.value)}
                           onBlur={() => {
+                            if (fbarActionRef.current) { fbarActionRef.current = null; return; }
                             if (draft === "") clr(sel);
                             else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
                           }}
                           onKeyDown={e => {
-                            if (e.key === "Escape") { e.preventDefault(); setEditMode(false); }
+                            if (e.key === "Escape") { e.preventDefault(); fbarActionRef.current = "cancel"; setEditMode(false); }
                             if (e.key === "Enter" || e.key === "Tab") {
                               e.preventDefault();
+                              fbarActionRef.current = "commit";
                               if (draft === "") clr(sel); else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
                               setEditMode(false);
-                              if (e.key === "Tab") {
-                                const ci = NAV.indexOf(sel[0]);
-                                const nc = NAV[Math.min(ci+1, NAV.length-1)];
-                                if (nc !== sel[0]) { setSel(`${nc}${parseInt(sel.slice(1))}`); setSelEnd(null); }
-                              } else {
-                                setSel(`${sel[0]}${Math.min(parseInt(sel.slice(1))+1, 35)}`); setSelEnd(null);
-                              }
                             }
                           }}
                           style={{
