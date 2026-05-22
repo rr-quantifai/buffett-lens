@@ -324,22 +324,6 @@
         setSelEnd(null);
       };
 
-      const doPaste = (e, startCr) => {
-        const txt = e.clipboardData.getData("text");
-        const rows = txt.trim().split(/\r?\n/);
-        if (rows.length <= 1 && !rows[0].includes("\t")) return;
-        e.preventDefault();
-        const sc = COLS.indexOf(startCr[0]), sr = parseInt(startCr.slice(1));
-        const ni = { ...inp };
-        rows.forEach((row, ri) => {
-          row.split("\t").forEach((cell, ci) => {
-            const cr = `${COLS[sc+ci]}${sr+ri}`;
-            if (INP.has(cr)) { const n=parseN(cell); if (!isNaN(n)) ni[cr]=n; }
-          });
-        });
-        setInpH(ni);
-      };
-
       // Auto-scroll to keep sel in view
       useEffect(() => {
         if (!scrollRef.current) return;
@@ -655,8 +639,8 @@
 
           <div ref={scrollRef} style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
             <Sheet
-              data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
-              upd={upd} clr={clr} doPaste={doPaste}
+              data={data} inp={inp} sel={sel} selEnd={selEnd} handleSelect={handleSelect}
+              upd={upd} clr={clr}
               editMode={editMode} setEditMode={setEditMode}
               startCharRef={startCharRef} explicitEditRef={explicitEditRef}
               exitEdit={exitEdit} tabFromCell={tabFromCell}
@@ -668,7 +652,7 @@
       );
     }
 
-    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
+    function Sheet({data, inp, sel, selEnd, handleSelect, upd, clr, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       const blankStyle = cr => ({
         background:"#ffffff",
         borderRight:`1px solid ${C.border}`,
@@ -702,8 +686,8 @@
               );
               return (
                 <SheetRow key={r} row={r} data={data} inp={inp}
-                  sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
-                  upd={upd} clr={clr} doPaste={doPaste}
+                  sel={sel} selEnd={selEnd} handleSelect={handleSelect}
+                  upd={upd} clr={clr}
                   editMode={editMode} setEditMode={setEditMode}
                   startCharRef={startCharRef} explicitEditRef={explicitEditRef}
                   exitEdit={exitEdit} tabFromCell={tabFromCell}
@@ -716,7 +700,7 @@
       );
     }
 
-    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
+    function SheetRow({row, data, inp, sel, selEnd, handleSelect, upd, clr, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       return (
         <tr>
           <td style={{
@@ -741,8 +725,8 @@
 
           {COLS.map(col => (
             <GridCell key={col} cr={`${col}${row}`}
-              data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
-              upd={upd} clr={clr} doPaste={doPaste}
+              data={data} inp={inp} sel={sel} selEnd={selEnd} handleSelect={handleSelect}
+              upd={upd} clr={clr}
               editMode={editMode} setEditMode={setEditMode}
               startCharRef={startCharRef} explicitEditRef={explicitEditRef}
               exitEdit={exitEdit} tabFromCell={tabFromCell}
@@ -753,7 +737,7 @@
       );
     }
 
-    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
+    function GridCell({cr, data, inp, sel, selEnd, handleSelect, upd, clr, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
       const isSel     = sel === cr;
@@ -793,7 +777,7 @@
             cr={cr} rawVal={inp[cr]} isSel={isSel} isInRange={isInRange} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
             bg={isBlue?C.blueCell:C.input}
-            upd={upd} clr={clr} doPaste={doPaste}
+            upd={upd} clr={clr}
             isEditing={isEditing}
             startCharRef={startCharRef} explicitEditRef={explicitEditRef}
             onExitEdit={exitEdit}
@@ -815,7 +799,7 @@
       );
     }
 
-    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, explicitEditRef, onExitEdit, onTab, onEnter, onArrow, draft, setDraft, fbarFocusRef}) {
+    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, isEditing, startCharRef, explicitEditRef, onExitEdit, onTab, onEnter, onArrow, draft, setDraft, fbarFocusRef}) {
       const ref      = useRef(null);
       const modified = useRef(false);
 
