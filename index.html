@@ -92,6 +92,14 @@
     const R_PS  = new Set([21,22,23]);
     const R_PCT = new Set([25,26,27]);
 
+    function inSelRange(cr, sel, selEnd) {
+      if (!selEnd) return cr === sel;
+      const c=cr[0], r=parseInt(cr.slice(1)), ci=NAV.indexOf(c);
+      const ci1=NAV.indexOf(sel[0]),   r1=parseInt(sel.slice(1));
+      const ci2=NAV.indexOf(selEnd[0]),r2=parseInt(selEnd.slice(1));
+      return ci>=Math.min(ci1,ci2)&&ci<=Math.max(ci1,ci2)&&r>=Math.min(r1,r2)&&r<=Math.max(r1,r2);
+    }
+
     const EM   = "—";
     const fCr  = v => { if (v==null||isNaN(v)) return EM; const s=Math.round(Math.abs(v)).toLocaleString("en-US"); return v<0?`(${s})`:s; };
     const fPS  = v => (v==null||isNaN(v)) ? EM : Math.abs(v).toLocaleString("en-US",{minimumFractionDigits:2,maximumFractionDigits:2});
@@ -242,7 +250,12 @@
       const startCharRef = useRef(null);     // char that triggered edit mode, or null
       const [inp,      setInp]      = useState(DEFS);
       const [sel,      setSel]      = useState("A1");
+      const [selEnd,   setSelEnd]   = useState(null);
       const [editMode, setEditMode] = useState(false);
+      const handleSelect = (cr, shift=false) => {
+        if (shift && sel) setSelEnd(cr);
+        else { setSel(cr); setSelEnd(null); }
+      };
       const [mult,     setMult]     = useState(150);
       const [mcapex,   setMcapex]   = useState(75);
       const data = useMemo(() => calc(inp, mult, mcapex), [inp, mult, mcapex]);
@@ -255,7 +268,7 @@
         setEditMode(false);
         const ci = NAV.indexOf(cr[0]);
         const nc = NAV[Math.min(ci+1, NAV.length-1)];
-        if (nc !== cr[0]) setSel(`${nc}${parseInt(cr.slice(1))}`);
+        if (nc !== cr[0]) { setSel(`${nc}${parseInt(cr.slice(1))}`); setSelEnd(null); }
       };
 
       const doPaste = (e, startCr) => {
@@ -276,30 +289,33 @@
 
       // Auto-scroll to keep sel in view
       useEffect(() => {
-        if (!sel || !scrollRef.current) return;
-        const row = parseInt(sel.slice(1));
+        if (!scrollRef.current) return;
+        const target = selEnd || sel;
+        if (!target) return;
+        const row = parseInt(target.slice(1));
         let top = G.rowH;
         for (let r = 1; r < row; r++) top += BLANKS.has(r) ? G.blankH : G.rowH;
         const h = BLANKS.has(row) ? G.blankH : G.rowH;
         const c = scrollRef.current;
         if (top - G.rowH < c.scrollTop) c.scrollTop = Math.max(0, top - G.rowH);
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
-      }, [sel]);
+      }, [sel, selEnd]);
 
       // Global keyboard handler
       useEffect(() => {
         const onKey = e => {
           if (!sel) return;
 
-          // ── Edit mode: only intercept Tab (Enter/Escape handled by ICell) ──
+          // ── Edit mode: intercept Enter and Tab ──
           if (editMode) {
+            if (e.key === "Enter") { e.preventDefault(); setEditMode(false); return; }
             if (e.key === "Tab" && !e.defaultPrevented) {
               // ICell handles Tab itself via onTab prop; this catches any edge case
               e.preventDefault();
               setEditMode(false);
               const ci = NAV.indexOf(sel[0]);
               const nc = NAV[Math.min(ci+1, NAV.length-1)];
-              if (nc !== sel[0]) setSel(`${nc}${parseInt(sel.slice(1))}`);
+              if (nc !== sel[0]) { setSel(`${nc}${parseInt(sel.slice(1))}`); setSelEnd(null); }
             }
             return; // all other keys handled by the focused input
           }
@@ -309,19 +325,29 @@
 
           if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
             e.preventDefault();
-            let nc=col, nr=row;
-            if (e.key==="ArrowRight") nc=NAV[Math.min(ci+1, NAV.length-1)];
-            if (e.key==="ArrowLeft")  nc=NAV[Math.max(ci-1, 0)];
-            if (e.key==="ArrowDown")  nr=Math.min(row+1, 35);
-            if (e.key==="ArrowUp")    nr=Math.max(row-1, 1);
-            if (nc!==col||nr!==row) setSel(`${nc}${nr}`);
+            if (e.shiftKey) {
+              const base=selEnd||sel, bc=base[0], br=parseInt(base.slice(1)), bci=NAV.indexOf(bc);
+              let nc=bc, nr=br;
+              if (e.key==="ArrowRight") nc=NAV[Math.min(bci+1, NAV.length-1)];
+              if (e.key==="ArrowLeft")  nc=NAV[Math.max(bci-1, 0)];
+              if (e.key==="ArrowDown")  nr=Math.min(br+1, 35);
+              if (e.key==="ArrowUp")    nr=Math.max(br-1, 1);
+              setSelEnd(`${nc}${nr}`);
+            } else {
+              let nc=col, nr=row;
+              if (e.key==="ArrowRight") nc=NAV[Math.min(ci+1, NAV.length-1)];
+              if (e.key==="ArrowLeft")  nc=NAV[Math.max(ci-1, 0)];
+              if (e.key==="ArrowDown")  nr=Math.min(row+1, 35);
+              if (e.key==="ArrowUp")    nr=Math.max(row-1, 1);
+              if (nc!==col||nr!==row) { setSel(`${nc}${nr}`); setSelEnd(null); }
+            }
             return;
           }
 
           if (e.key === "Tab") {
             e.preventDefault();
             const nc = NAV[Math.min(ci+1, NAV.length-1)];
-            if (nc !== col) setSel(`${nc}${row}`);
+            if (nc !== col) { setSel(`${nc}${row}`); setSelEnd(null); }
             return;
           }
 
@@ -350,7 +376,7 @@
         };
         window.addEventListener("keydown", onKey);
         return () => window.removeEventListener("keydown", onKey);
-      }, [sel, editMode]);
+      }, [sel, editMode, selEnd]);
 
       const isDisabled = !!sel && (
         FRZ.has(sel) ||
@@ -420,7 +446,7 @@
 
           <div ref={scrollRef} style={{overflow:"auto", maxHeight:`calc(100vh - ${G.headerH+G.fbarH}px)`}}>
             <Sheet
-              data={data} inp={inp} sel={sel} setSel={setSel}
+              data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
               upd={upd} clr={clr} doPaste={doPaste}
               editMode={editMode} setEditMode={setEditMode}
               startCharRef={startCharRef}
@@ -431,12 +457,12 @@
       );
     }
 
-    function Sheet({data, inp, sel, setSel, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
       const blankStyle = cr => ({
         background:"#ffffff",
         borderRight:`1px solid ${C.border}`,
         borderBottom:`1px solid ${C.border}`,
-        boxShadow: sel===cr ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+        boxShadow: sel===cr ? `inset 0 0 0 2px ${C.selBorder}` : inSelRange(cr,sel,selEnd) ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none",
         height:G.blankH, boxSizing:"border-box", padding:0, cursor:"pointer",
       });
 
@@ -451,7 +477,7 @@
             <tr>
               <th style={TH_BASE} />
               <th style={{...TH_BASE, fontWeight:sel&&sel[0]==="A"?700:400,background:sel&&sel[0]==="A"?C.selBg:C.colHdr}}>A</th>
-              {COLS.map(c => <th key={c} style={{...TH_BASE, fontWeight:sel&&sel[0]===c?700:400,background:sel&&sel[0]===c?C.selBg:C.colHdr}}>{c}</th>)}
+              {COLS.map(c => { const ci=NAV.indexOf(c), inCol=sel&&(selEnd?ci>=Math.min(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0]))&&ci<=Math.max(NAV.indexOf(sel[0]),NAV.indexOf(selEnd[0])):sel[0]===c); return <th key={c} style={{...TH_BASE, fontWeight:inCol?700:400, background:inCol?C.selBg:C.colHdr}}>{c}</th>; })}
             </tr>
           </thead>
           <tbody>
@@ -459,13 +485,14 @@
               if (BLANKS.has(r)) return (
                 <tr key={r}>
                   <td style={{background:"#ffffff", borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`, height:G.blankH, boxSizing:"border-box", padding:0}} />
-                  <td style={blankStyle(`A${r}`)} onClick={() => { if (editMode) exitEdit(); setSel(`A${r}`); }} />
-                  {COLS.map(col => <td key={col} style={blankStyle(`${col}${r}`)} onClick={() => { if (editMode) exitEdit(); setSel(`${col}${r}`); }} />)}
+                  <td style={blankStyle(`A${r}`)} onClick={e => { if (editMode) exitEdit(); handleSelect(`A${r}`, e.shiftKey); }} />
+                  {COLS.map(col => <td key={col} style={blankStyle(`${col}${r}`)} onClick={e => { if (editMode) exitEdit(); handleSelect(`${col}${r}`, e.shiftKey); }} />)}
                 </tr>
               );
               return (
                 <SheetRow key={r} row={r} data={data} inp={inp}
-                  sel={sel} setSel={setSel} upd={upd} clr={clr} doPaste={doPaste}
+                  sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
+                  upd={upd} clr={clr} doPaste={doPaste}
                   editMode={editMode} setEditMode={setEditMode}
                   startCharRef={startCharRef} exitEdit={exitEdit} tabFromCell={tabFromCell} />
               );
@@ -475,32 +502,33 @@
       );
     }
 
-    function SheetRow({row, data, inp, sel, setSel, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
       return (
         <tr>
           <td style={{
-            background:sel&&parseInt(sel.slice(1))===row?C.selBg:C.rowNum, color:C.rowNumFg,
+            background:(()=>{const sr=parseInt(sel.slice(1)),er=selEnd?parseInt(selEnd.slice(1)):sr;return row>=Math.min(sr,er)&&row<=Math.max(sr,er);})()?C.selBg:C.rowNum, color:C.rowNumFg,
             fontSize:11, fontWeight:sel&&parseInt(sel.slice(1))===row?700:400, textAlign:"center",
             padding:`${CP.v}px ${CP.h}px`,
             borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
             height:G.rowH, boxSizing:"border-box", userSelect:"none",
           }}>{row}</td>
 
-          <td onClick={() => { if (editMode) exitEdit(); setSel(`A${row}`); }} style={{
+          <td onClick={e => { if (editMode) exitEdit(); handleSelect(`A${row}`, e.shiftKey); }} style={{
             background:C.labelCol, color:C.labelFg,
             fontSize:12, fontWeight:500,
             padding:`${CP.v}px ${CP.h}px`,
             borderRight:`1px solid ${C.border}`, borderBottom:`1px solid ${C.border}`,
             overflow:"hidden", textOverflow:"ellipsis",
             height:G.rowH, boxSizing:"border-box", userSelect:"none", cursor:"pointer",
-            boxShadow: sel===`A${row}` ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+            boxShadow: sel===`A${row}` ? `inset 0 0 0 2px ${C.selBorder}` : inSelRange(`A${row}`,sel,selEnd) ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none",
           }}>
             <RowLabel row={row} />
           </td>
 
           {COLS.map(col => (
             <GridCell key={col} cr={`${col}${row}`}
-              data={data} inp={inp} sel={sel} setSel={setSel} upd={upd} clr={clr} doPaste={doPaste}
+              data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
+              upd={upd} clr={clr} doPaste={doPaste}
               editMode={editMode} setEditMode={setEditMode}
               startCharRef={startCharRef} exitEdit={exitEdit} tabFromCell={tabFromCell} />
           ))}
@@ -508,10 +536,11 @@
       );
     }
 
-    function GridCell({cr, data, inp, sel, setSel, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
       const isSel    = sel === cr;
+      const isInRange = inSelRange(cr, sel, selEnd);
       const isEditing = isSel && editMode;
 
       let bg, fg, fw=400, ta="right";
@@ -522,8 +551,8 @@
       else if (isLtxt) { bg=C.ltxt; fg=C.ltxtFg; ta="left"; fw=500; }
       else             { bg=C.formula; fg=C.formulaFg; }
 
-      // Selected: inset border only. Edit mode: inset border + inner glow.
-      const shadow = isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none";
+      // Selected: thick border. Range: blue tint. Edit mode: handled in ICell.
+      const shadow = isSel ? `inset 0 0 0 2px ${C.selBorder}` : isInRange ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none";
 
       const tdBase = {
         borderRight:`1px solid ${C.border}`,
@@ -536,11 +565,11 @@
 
       if (isInp) return (
         <td
-          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"cell", boxShadow:"none"}}
-          onClick={() => { if (editMode && !isSel) exitEdit(); setSel(cr); }}
-          onDoubleClick={() => { setSel(cr); startCharRef.current=null; setEditMode(true); }}>
+          style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"pointer", boxShadow:"none"}}
+          onClick={e => { if (editMode && !isSel) exitEdit(); handleSelect(cr, e.shiftKey); }}
+          onDoubleClick={() => { handleSelect(cr); startCharRef.current=null; setEditMode(true); }}>
           <ICell
-            cr={cr} rawVal={inp[cr]} isSel={isSel} isBlue={isBlue}
+            cr={cr} rawVal={inp[cr]} isSel={isSel} isInRange={isInRange} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
             bg={isBlue?C.blueCell:C.input}
             upd={upd} clr={clr} doPaste={doPaste}
@@ -554,13 +583,13 @@
 
       return (
         <td style={{...tdBase, background:bg, padding:`${CP.v}px ${CP.h}px`, cursor:"pointer"}}
-          onClick={() => { if (editMode) exitEdit(); setSel(cr); }}>
+          onClick={e => { if (editMode) exitEdit(); handleSelect(cr, e.shiftKey); }}>
           {isFrz ? null : isLtxt ? LTXT_V[cr] : fmtCell(cr, data[cr])}
         </td>
       );
     }
 
-    function ICell({cr, rawVal, isSel, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, onExitEdit, onTab}) {
+    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, onExitEdit, onTab}) {
       const [draft, setDraft] = useState("");
       const ref      = useRef(null);
       const modified = useRef(false);
@@ -602,13 +631,16 @@
           onChange={e => { if (isEditing) { modified.current = true; setDraft(e.target.value); } }}
           onBlur={commit}
           onPaste={e => {
-            const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
-            if (lines.length>1||lines[0].includes("\t")) doPaste(e, cr);
+            if (!isEditing) {
+              const lines = e.clipboardData.getData("text").trim().split(/\r?\n/);
+              if (lines.length>1||lines[0].includes("\t")) doPaste(e, cr);
+            }
           }}
           onKeyDown={e => {
             if (!isEditing) return;
-            if (e.key==="Enter" || e.key==="Escape") { e.preventDefault(); commit(); onExitEdit(); }
-            if (e.key==="Tab") { e.preventDefault(); commit(); onTab(); }
+            if (e.key==="Escape") { e.preventDefault(); e.stopPropagation(); modified.current=false; onExitEdit(); }
+            if (e.key==="Enter")  { e.preventDefault(); e.stopPropagation(); commit(); onExitEdit(); }
+            if (e.key==="Tab") { e.preventDefault(); e.stopPropagation(); commit(); onTab(); }
           }}
           style={{
             width:"100%", height:"100%", border:"none", outline:"none",
@@ -616,13 +648,13 @@
             padding:`${CP.v}px ${CP.h}px`,
             fontSize:12, fontWeight:isBlue?600:400,
             boxSizing:"border-box",
-            cursor: isEditing ? "text" : "default",
+            cursor: isEditing ? "text" : "pointer",
             fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
             caretColor: isEditing ? "auto" : "transparent",
             userSelect: isEditing ? "auto" : "none",
             boxShadow: isEditing
               ? `inset 0 0 0 2px ${C.selBorder}, inset 0 0 0 6px #bfdbfe`
-              : isSel ? `inset 0 0 0 2px ${C.selBorder}` : "none",
+              : isSel ? `inset 0 0 0 2px ${C.selBorder}` : isInRange ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none",
           }}
         />
       );
@@ -689,8 +721,23 @@
       );
     }
 
+    function DesktopGuard({children}) {
+      const [narrow, setNarrow] = useState(window.innerWidth < TOTAL_W + 40);
+      useEffect(() => {
+        const h = () => setNarrow(window.innerWidth < TOTAL_W + 40);
+        window.addEventListener("resize", h);
+        return () => window.removeEventListener("resize", h);
+      }, []);
+      if (narrow) return (
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100vh",fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",fontSize:16,color:"#555",background:"#f0f0f0"}}>
+          Accessible only on a desktop
+        </div>
+      );
+      return children;
+    }
+
     const root = ReactDOM.createRoot(document.getElementById("root"));
-    root.render(<App />);
+    root.render(<DesktopGuard><App /></DesktopGuard>);
   </script>
 </body>
 </html>
