@@ -247,7 +247,8 @@
 
     function App() {
       const scrollRef    = useRef(null);
-      const startCharRef = useRef(null);     // char that triggered edit mode, or null
+      const startCharRef    = useRef(null);  // char that triggered edit mode, or null
+      const explicitEditRef = useRef(false); // true = Enter/dblclick, false = typed char
       const [inp,      setInp]      = useState(DEFS);
       const [sel,      setSel]      = useState("A1");
       const [selEnd,   setSelEnd]   = useState(null);
@@ -269,6 +270,23 @@
         const ci = NAV.indexOf(cr[0]);
         const nc = NAV[Math.min(ci+1, NAV.length-1)];
         if (nc !== cr[0]) { setSel(`${nc}${parseInt(cr.slice(1))}`); setSelEnd(null); }
+      };
+      const enterFromCell = cr => {
+        setEditMode(false);
+        const nr = Math.min(parseInt(cr.slice(1)) + 1, 35);
+        setSel(`${cr[0]}${nr}`);
+        setSelEnd(null);
+      };
+      const navigateFromCell = (cr, dir) => {
+        setEditMode(false);
+        const col=cr[0], row=parseInt(cr.slice(1)), ci=NAV.indexOf(col);
+        let nc=col, nr=row;
+        if (dir==="ArrowRight") nc=NAV[Math.min(ci+1,NAV.length-1)];
+        if (dir==="ArrowLeft")  nc=NAV[Math.max(ci-1,0)];
+        if (dir==="ArrowDown")  nr=Math.min(row+1,35);
+        if (dir==="ArrowUp")    nr=Math.max(row-1,1);
+        setSel(`${nc}${nr}`);
+        setSelEnd(null);
       };
 
       const doPaste = (e, startCr) => {
@@ -308,7 +326,13 @@
 
           // ── Edit mode: intercept Enter and Tab ──
           if (editMode) {
-            if (e.key === "Enter") { e.preventDefault(); setEditMode(false); return; }
+            if (e.key === "Enter") {
+              e.preventDefault();
+              setEditMode(false);
+              const nr = Math.min(parseInt(sel.slice(1)) + 1, 35);
+              setSel(`${sel[0]}${nr}`); setSelEnd(null);
+              return;
+            }
             if (e.key === "Tab" && !e.defaultPrevented) {
               // ICell handles Tab itself via onTab prop; this catches any edge case
               e.preventDefault();
@@ -357,13 +381,25 @@
           if (e.key === "Enter") {
             e.preventDefault();
             startCharRef.current = null;
+            explicitEditRef.current = true;
             setEditMode(true);
             return;
           }
 
           if (e.key === "Delete" || e.key === "Backspace") {
             e.preventDefault();
-            clr(sel);
+            if (selEnd) {
+              setInp(p => {
+                const n = {...p};
+                NAV.forEach(c => ALL_ROWS.forEach(r => {
+                  const cr = `${c}${r}`;
+                  if (INP.has(cr) && inSelRange(cr, sel, selEnd)) delete n[cr];
+                }));
+                return n;
+              });
+            } else {
+              clr(sel);
+            }
             return;
           }
 
@@ -371,6 +407,7 @@
           if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             startCharRef.current = e.key;
+            explicitEditRef.current = false;
             setEditMode(true);
           }
         };
@@ -449,15 +486,16 @@
               data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
               upd={upd} clr={clr} doPaste={doPaste}
               editMode={editMode} setEditMode={setEditMode}
-              startCharRef={startCharRef}
+              startCharRef={startCharRef} explicitEditRef={explicitEditRef}
               exitEdit={exitEdit} tabFromCell={tabFromCell}
+              enterFromCell={enterFromCell} navigateFromCell={navigateFromCell}
             />
           </div>
         </div>
       );
     }
 
-    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
       const blankStyle = cr => ({
         background:"#ffffff",
         borderRight:`1px solid ${C.border}`,
@@ -494,7 +532,9 @@
                   sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
                   upd={upd} clr={clr} doPaste={doPaste}
                   editMode={editMode} setEditMode={setEditMode}
-                  startCharRef={startCharRef} exitEdit={exitEdit} tabFromCell={tabFromCell} />
+                  startCharRef={startCharRef} explicitEditRef={explicitEditRef}
+                  exitEdit={exitEdit} tabFromCell={tabFromCell}
+                  enterFromCell={enterFromCell} navigateFromCell={navigateFromCell} />
               );
             })}
           </tbody>
@@ -502,7 +542,7 @@
       );
     }
 
-    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
       return (
         <tr>
           <td style={{
@@ -530,13 +570,15 @@
               data={data} inp={inp} sel={sel} setSel={setSel} selEnd={selEnd} handleSelect={handleSelect}
               upd={upd} clr={clr} doPaste={doPaste}
               editMode={editMode} setEditMode={setEditMode}
-              startCharRef={startCharRef} exitEdit={exitEdit} tabFromCell={tabFromCell} />
+              startCharRef={startCharRef} explicitEditRef={explicitEditRef}
+              exitEdit={exitEdit} tabFromCell={tabFromCell}
+              enterFromCell={enterFromCell} navigateFromCell={navigateFromCell} />
           ))}
         </tr>
       );
     }
 
-    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, exitEdit, tabFromCell}) {
+    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
       const isSel    = sel === cr;
@@ -567,16 +609,18 @@
         <td
           style={{...tdBase, background:isBlue?C.blueCell:bg, padding:0, cursor:"pointer", boxShadow:"none"}}
           onClick={e => { if (editMode && !isSel) exitEdit(); handleSelect(cr, e.shiftKey); }}
-          onDoubleClick={() => { handleSelect(cr); startCharRef.current=null; setEditMode(true); }}>
+          onDoubleClick={() => { explicitEditRef.current=true; handleSelect(cr); startCharRef.current=null; setEditMode(true); }}>
           <ICell
             cr={cr} rawVal={inp[cr]} isSel={isSel} isInRange={isInRange} isBlue={isBlue}
             fg={isBlue?C.blueCellFg:C.inputFg}
             bg={isBlue?C.blueCell:C.input}
             upd={upd} clr={clr} doPaste={doPaste}
             isEditing={isEditing}
-            startCharRef={startCharRef}
+            startCharRef={startCharRef} explicitEditRef={explicitEditRef}
             onExitEdit={exitEdit}
             onTab={() => tabFromCell(cr)}
+            onEnter={() => enterFromCell(cr)}
+            onArrow={dir => navigateFromCell(cr, dir)}
           />
         </td>
       );
@@ -589,7 +633,7 @@
       );
     }
 
-    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, onExitEdit, onTab}) {
+    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, explicitEditRef, onExitEdit, onTab, onEnter, onArrow}) {
       const [draft, setDraft] = useState("");
       const ref      = useRef(null);
       const modified = useRef(false);
@@ -638,9 +682,12 @@
           }}
           onKeyDown={e => {
             if (!isEditing) return;
-            if (e.key==="Escape") { e.preventDefault(); e.stopPropagation(); modified.current=false; onExitEdit(); }
-            if (e.key==="Enter")  { e.preventDefault(); e.stopPropagation(); commit(); onExitEdit(); }
-            if (e.key==="Tab") { e.preventDefault(); e.stopPropagation(); commit(); onTab(); }
+            if (e.key==="Escape")    { e.preventDefault(); e.stopPropagation(); modified.current=false; onExitEdit(); }
+            if (e.key==="Enter")     { e.preventDefault(); e.stopPropagation(); commit(); onEnter(); }
+            if (e.key==="Tab")       { e.preventDefault(); e.stopPropagation(); commit(); onTab(); }
+            if (!explicitEditRef.current && ["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
+              e.preventDefault(); e.stopPropagation(); commit(); onArrow(e.key);
+            }
           }}
           style={{
             width:"100%", height:"100%", border:"none", outline:"none",
