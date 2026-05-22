@@ -630,12 +630,14 @@
                             else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
                           }}
                           onKeyDown={e => {
-                            if (e.key === "Escape") { e.preventDefault(); fbarActionRef.current = "cancel"; setEditMode(false); }
+                            if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); fbarActionRef.current = "cancel"; setEditMode(false); }
                             if (e.key === "Enter" || e.key === "Tab") {
-                              e.preventDefault();
+                              e.preventDefault(); e.stopPropagation();
                               fbarActionRef.current = "commit";
                               if (draft === "") clr(sel); else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
                               setEditMode(false);
+                              if (e.key === "Enter") { setSel(`${sel[0]}${Math.min(parseInt(sel.slice(1))+1, 35)}`); setSelEnd(null); }
+                              else { const ci=NAV.indexOf(sel[0]); const nc=NAV[Math.min(ci+1,NAV.length-1)]; if (nc!==sel[0]) { setSel(`${nc}${parseInt(sel.slice(1))}`); setSelEnd(null); } }
                             }
                           }}
                           style={{
