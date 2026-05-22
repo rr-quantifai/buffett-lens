@@ -249,10 +249,6 @@
       const scrollRef    = useRef(null);
       const startCharRef    = useRef(null);  // char that triggered edit mode, or null
       const explicitEditRef = useRef(false); // true = Enter/dblclick, false = typed char
-      const dataRef      = useRef(data);
-      const inpRef       = useRef(inp);
-      dataRef.current = data;
-      inpRef.current  = inp;
       const [inp,      setInp]      = useState(DEFS);
       const [sel,      setSel]      = useState("A1");
       const [selEnd,   setSelEnd]   = useState(null);
@@ -261,12 +257,46 @@
         if (shift && sel) setSelEnd(cr);
         else { setSel(cr); setSelEnd(null); }
       };
+      const [draft,    setDraft]    = useState("");
       const [mult,     setMult]     = useState(150);
       const [mcapex,   setMcapex]   = useState(75);
+      const fbarInputRef = useRef(null);
+      const fbarFocusRef = useRef(false);
+      const dataRef   = useRef(null);
+      const inpRef    = useRef(null);
+      const selRef    = useRef(null);
+      const selEndRef = useRef(null);
       const data = useMemo(() => calc(inp, mult, mcapex), [inp, mult, mcapex]);
+      dataRef.current   = data;
+      inpRef.current    = inp;
+      selRef.current    = sel;
+      selEndRef.current = selEnd;
 
-      const upd = (cr, n) => { if (!isNaN(n)) setInp(p => ({ ...p, [cr]: n })); };
-      const clr = cr => setInp(p => { const n={...p}; delete n[cr]; return n; });
+      const histRef = useRef([{ inp: DEFS, sel: "A1", selEnd: null }]);
+      const histIdx = useRef(0);
+      const setInpH = fn => {
+        setInp(prev => {
+          const next = typeof fn === 'function' ? fn(prev) : fn;
+          histRef.current = histRef.current.slice(0, histIdx.current + 1);
+          histRef.current.push({ inp: next, sel: selRef.current, selEnd: selEndRef.current });
+          histIdx.current = histRef.current.length - 1;
+          return next;
+        });
+      };
+      const undo = () => {
+        if (histIdx.current <= 0) return;
+        histIdx.current--;
+        const h = histRef.current[histIdx.current];
+        setInp(h.inp); setSel(h.sel); setSelEnd(h.selEnd);
+      };
+      const redo = () => {
+        if (histIdx.current >= histRef.current.length - 1) return;
+        histIdx.current++;
+        const h = histRef.current[histIdx.current];
+        setInp(h.inp); setSel(h.sel); setSelEnd(h.selEnd);
+      };
+      const upd = (cr, n) => { if (!isNaN(n)) setInpH(p => ({ ...p, [cr]: n })); };
+      const clr = cr => setInpH(p => { const n={...p}; delete n[cr]; return n; });
 
       const exitEdit    = () => setEditMode(false);
       const tabFromCell = cr => {
@@ -306,7 +336,7 @@
             if (INP.has(cr)) { const n=parseN(cell); if (!isNaN(n)) ni[cr]=n; }
           });
         });
-        setInp(ni);
+        setInpH(ni);
       };
 
       // Auto-scroll to keep sel in view
@@ -322,6 +352,20 @@
         if (top - G.rowH < c.scrollTop) c.scrollTop = Math.max(0, top - G.rowH);
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel, selEnd]);
+
+      // Focus formula bar input when edit was triggered by clicking the formula bar
+      useEffect(() => {
+        if (!editMode || !fbarFocusRef.current) return;
+        const t = setTimeout(() => {
+          if (fbarInputRef.current && fbarFocusRef.current) {
+            fbarInputRef.current.focus();
+            const len = fbarInputRef.current.value.length;
+            fbarInputRef.current.setSelectionRange(len, len);
+            fbarFocusRef.current = false;
+          }
+        }, 0);
+        return () => clearTimeout(t);
+      }, [editMode]);
 
       // Global paste handler (select mode)
       useEffect(() => {
@@ -339,7 +383,7 @@
             const startCol = NAV[sc0];
             if (!COLS.includes(startCol)) return;
             const sc = COLS.indexOf(startCol);
-            setInp(p => {
+            setInpH(p => {
               const n={...p};
               rows.forEach((row,ri) => row.split("\t").forEach((cell,ci) => {
                 const cr=`${COLS[sc+ci]}${sr0+ri}`;
@@ -350,7 +394,7 @@
           } else {
             const v = parseN(txt.trim());
             if (isNaN(v)) return;
-            setInp(p => {
+            setInpH(p => {
               const n={...p};
               if (selEnd) {
                 NAV.forEach(c => ALL_ROWS.forEach(r => {
@@ -424,6 +468,9 @@
             return;
           }
 
+          if ((e.key==="z"||e.key==="Z") && (e.metaKey||e.ctrlKey) && !e.shiftKey) { e.preventDefault(); undo(); return; }
+          if (((e.key==="y"||e.key==="Y") && (e.metaKey||e.ctrlKey)) || ((e.key==="z"||e.key==="Z") && (e.metaKey||e.ctrlKey) && e.shiftKey)) { e.preventDefault(); redo(); return; }
+
           if ((e.key==="c"||e.key==="C") && (e.metaKey||e.ctrlKey)) {
             e.preventDefault();
             const d=dataRef.current, i=inpRef.current;
@@ -447,7 +494,15 @@
             } else {
               txt=cv(sel);
             }
-            navigator.clipboard.writeText(txt).catch(()=>{});
+            navigator.clipboard.writeText(txt).catch(() => {
+              const el = document.createElement('textarea');
+              el.value = txt;
+              el.style.cssText = 'position:fixed;opacity:0;pointer-events:none';
+              document.body.appendChild(el);
+              el.focus(); el.select();
+              try { document.execCommand('copy'); } catch(_) {}
+              document.body.removeChild(el);
+            });
             return;
           }
 
@@ -465,7 +520,7 @@
           if (e.key === "Delete" || e.key === "Backspace") {
             e.preventDefault();
             if (selEnd) {
-              setInp(p => {
+              setInpH(p => {
                 const n = {...p};
                 NAV.forEach(c => ALL_ROWS.forEach(r => {
                   const cr = `${c}${r}`;
@@ -553,6 +608,7 @@
                 if (INP.has(sel) && !editMode) {
                   startCharRef.current = null;
                   explicitEditRef.current = true;
+                  fbarFocusRef.current = true;
                   setEditMode(true);
                 }
               }}
@@ -563,7 +619,38 @@
                   ? <B35FormulaBar mult={mult} setMult={setMult} />
                   : MCAPEX_CELLS.has(sel)
                     ? <McapexFormulaBar mcapex={mcapex} setMcapex={setMcapex} col={sel[0]} />
-                    : sel ? getFormula(sel, data, inp) : ""
+                    : editMode && INP.has(sel)
+                      ? <input
+                          ref={fbarInputRef}
+                          value={draft}
+                          onChange={e => setDraft(e.target.value)}
+                          onBlur={() => {
+                            if (draft === "") clr(sel);
+                            else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === "Escape") { e.preventDefault(); setEditMode(false); }
+                            if (e.key === "Enter" || e.key === "Tab") {
+                              e.preventDefault();
+                              if (draft === "") clr(sel); else { const n = parseN(draft); if (!isNaN(n)) upd(sel, n); }
+                              setEditMode(false);
+                              if (e.key === "Tab") {
+                                const ci = NAV.indexOf(sel[0]);
+                                const nc = NAV[Math.min(ci+1, NAV.length-1)];
+                                if (nc !== sel[0]) { setSel(`${nc}${parseInt(sel.slice(1))}`); setSelEnd(null); }
+                              } else {
+                                setSel(`${sel[0]}${Math.min(parseInt(sel.slice(1))+1, 35)}`); setSelEnd(null);
+                              }
+                            }
+                          }}
+                          style={{
+                            width:"100%", border:"none", outline:"none",
+                            background:"transparent", color:"#222",
+                            fontSize:12, padding:0, margin:0,
+                            fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
+                          }}
+                        />
+                      : sel ? getFormula(sel, data, inp) : ""
               }
             </div>
           </div>
@@ -576,13 +663,14 @@
               startCharRef={startCharRef} explicitEditRef={explicitEditRef}
               exitEdit={exitEdit} tabFromCell={tabFromCell}
               enterFromCell={enterFromCell} navigateFromCell={navigateFromCell}
+              draft={draft} setDraft={setDraft} fbarFocusRef={fbarFocusRef}
             />
           </div>
         </div>
       );
     }
 
-    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
+    function Sheet({data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       const blankStyle = cr => ({
         background:"#ffffff",
         borderRight:`1px solid ${C.border}`,
@@ -621,7 +709,8 @@
                   editMode={editMode} setEditMode={setEditMode}
                   startCharRef={startCharRef} explicitEditRef={explicitEditRef}
                   exitEdit={exitEdit} tabFromCell={tabFromCell}
-                  enterFromCell={enterFromCell} navigateFromCell={navigateFromCell} />
+                  enterFromCell={enterFromCell} navigateFromCell={navigateFromCell}
+                  draft={draft} setDraft={setDraft} fbarFocusRef={fbarFocusRef} />
               );
             })}
           </tbody>
@@ -629,7 +718,7 @@
       );
     }
 
-    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
+    function SheetRow({row, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       return (
         <tr>
           <td style={{
@@ -659,13 +748,14 @@
               editMode={editMode} setEditMode={setEditMode}
               startCharRef={startCharRef} explicitEditRef={explicitEditRef}
               exitEdit={exitEdit} tabFromCell={tabFromCell}
-              enterFromCell={enterFromCell} navigateFromCell={navigateFromCell} />
+              enterFromCell={enterFromCell} navigateFromCell={navigateFromCell}
+              draft={draft} setDraft={setDraft} fbarFocusRef={fbarFocusRef} />
           ))}
         </tr>
       );
     }
 
-    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell}) {
+    function GridCell({cr, data, inp, sel, setSel, selEnd, handleSelect, upd, clr, doPaste, editMode, setEditMode, startCharRef, explicitEditRef, exitEdit, tabFromCell, enterFromCell, navigateFromCell, draft, setDraft, fbarFocusRef}) {
       const isInp  = INP.has(cr),  isFrz  = FRZ.has(cr), isOut  = OUT.has(cr);
       const isLtxt = LTXT.has(cr), isBlue = BLUE.has(cr);
       const isSel     = sel === cr;
@@ -712,6 +802,7 @@
             onTab={() => tabFromCell(cr)}
             onEnter={() => enterFromCell(cr)}
             onArrow={dir => navigateFromCell(cr, dir)}
+            draft={draft} setDraft={setDraft} fbarFocusRef={fbarFocusRef}
           />
           {dot}
         </td>
@@ -726,8 +817,7 @@
       );
     }
 
-    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, explicitEditRef, onExitEdit, onTab, onEnter, onArrow}) {
-      const [draft, setDraft] = useState("");
+    function ICell({cr, rawVal, isSel, isInRange, isBlue, fg, bg, upd, clr, doPaste, isEditing, startCharRef, explicitEditRef, onExitEdit, onTab, onEnter, onArrow, draft, setDraft, fbarFocusRef}) {
       const ref      = useRef(null);
       const modified = useRef(false);
 
@@ -735,15 +825,17 @@
         if (isEditing && ref.current) {
           const sc = startCharRef.current;
           startCharRef.current = null;
-          modified.current = sc !== null; // already modified if triggered by a keypress
+          modified.current = sc !== null;
           setDraft(sc !== null ? sc : (rawVal != null && !isNaN(rawVal) ? String(rawVal) : ""));
-          ref.current.focus();
-          setTimeout(() => {
-            if (ref.current) {
-              const len = ref.current.value.length;
-              ref.current.setSelectionRange(len, len);
-            }
-          }, 0);
+          if (!fbarFocusRef.current) {
+            ref.current.focus();
+            setTimeout(() => {
+              if (ref.current) {
+                const len = ref.current.value.length;
+                ref.current.setSelectionRange(len, len);
+              }
+            }, 0);
+          }
         } else if (!isEditing && document.activeElement === ref.current) {
           ref.current.blur();
         }
@@ -823,7 +915,7 @@
           style={{
             width:`${Math.max(draft.length,1)}ch`,
             border:"none", outline:"none", background:"transparent",
-            fontSize:12, color:C.blueCell, fontWeight:700,
+            fontSize:12, color:"#888", fontWeight:600,
             padding:0, margin:0, textAlign:"center",
             verticalAlign:"baseline", display:"inline",
             fontFamily:"'Inter',ui-sans-serif,system-ui,sans-serif",
