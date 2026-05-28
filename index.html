@@ -869,39 +869,29 @@
     }
 
     function EditableNum({value, onChange, validate}) {
-      const [draft, setDraft] = useState(String(value));
-      const ref       = useRef(null);
-      const cancelled = useRef(false);
-
+      const ref   = useRef(null);
+      const saved = useRef(String(value));
       useEffect(() => {
-        if (document.activeElement !== ref.current) setDraft(String(value));
-      }, [value]);
-
-      const commit = () => {
-        if (!cancelled.current) {
-          const n = parseInt(draft);
-          if (!isNaN(n) && n > 0 && (!validate || validate(n))) onChange(n);
-          else setDraft(String(value));
-        }
-        cancelled.current = false;
-      };
+        if (ref.current) { ref.current.textContent = String(value); saved.current = String(value); }
+      }, []);
       return (
-        <input ref={ref}
-          value={draft}
-          onChange={e => setDraft(e.target.value.replace(/\D/g,""))}
-          onBlur={commit}
+        <span
+          ref={ref}
+          contentEditable
+          suppressContentEditableWarning
+          spellCheck={false}
+          onFocus={() => { saved.current = ref.current.textContent; }}
+          onBlur={() => {
+            const n = parseInt((ref.current.textContent||"").replace(/\D/g,""));
+            if (!isNaN(n) && n > 0 && (!validate || validate(n))) { onChange(n); ref.current.textContent = String(n); saved.current = String(n); }
+            else ref.current.textContent = saved.current;
+          }}
           onKeyDown={e => {
-            if (e.key==="Enter")  { ref.current.blur(); }
-            if (e.key==="Escape") { cancelled.current=true; ref.current.blur(); }
+            if (e.key==="Enter")  { e.preventDefault(); ref.current.blur(); }
+            if (e.key==="Escape") { e.preventDefault(); ref.current.textContent = saved.current; ref.current.blur(); }
+            if (!/\d/.test(e.key) && !["Backspace","Delete","ArrowLeft","ArrowRight","Home","End"].includes(e.key) && !e.metaKey && !e.ctrlKey) e.preventDefault();
           }}
-          style={{
-            width:`${Math.max(draft.length,1)}ch`,
-            border:"none", outline:"none", background:"transparent",
-            fontSize:12, color:"#888", fontWeight:600,
-            padding:0, margin:0, textAlign:"center",
-            verticalAlign:"baseline", display:"inline",
-            fontFamily:"'Inter',ui-sans-serif,sans-serif",
-          }}
+          style={{ outline:"none", cursor:"text" }}
         />
       );
     }
