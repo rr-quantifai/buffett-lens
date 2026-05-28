@@ -587,9 +587,9 @@
                 boxSizing:"border-box",
                 cursor: INP.has(sel) && !editMode ? "text" : "default",
               }}
-              onMouseDown={e => { if (e.target.tagName !== "INPUT") e.preventDefault(); }}
-              onClick={() => {
-                if (INP.has(sel) && !editMode) {
+              onMouseDown={e => { if (e.target.tagName !== "INPUT" && !e.target.isContentEditable) e.preventDefault(); }}
+              onClick={e => {
+                if (INP.has(sel) && !editMode && !e.target.isContentEditable) {
                   startCharRef.current = null;
                   explicitEditRef.current = true;
                   fbarFocusRef.current = true;
