@@ -151,7 +151,6 @@
       return m;
     })();
 
-    // inp passed so formula bar shows blank for empty input cells (not 0)
     function getFormula(cr, data, inp={}) {
       if (!cr) return "";
       const row = parseInt(cr.slice(1));
@@ -186,7 +185,6 @@
       return grn;
     }
 
-    // Empty by default — calc() normalises undefined → 0 internally
     const DEFS = {};
 
     function calc(inp, mult=150, mcapex=75) {
@@ -247,8 +245,8 @@
 
     function App() {
       const scrollRef    = useRef(null);
-      const startCharRef    = useRef(null);  // char that triggered edit mode, or null
-      const explicitEditRef = useRef(false); // true = Enter/dblclick, false = typed char
+      const startCharRef    = useRef(null);
+      const explicitEditRef = useRef(false);
       const [inp,      setInp]      = useState(DEFS);
       const [sel,      setSel]      = useState("A1");
       const [selEnd,   setSelEnd]   = useState(null);
@@ -324,7 +322,6 @@
         setSelEnd(null);
       };
 
-      // Auto-scroll to keep sel in view
       useEffect(() => {
         if (!scrollRef.current) return;
         const target = selEnd || sel;
@@ -338,7 +335,6 @@
         else if (top + h > c.scrollTop + c.clientHeight) c.scrollTop = top + h - c.clientHeight;
       }, [sel, selEnd]);
 
-      // Focus formula bar input when edit was triggered by clicking the formula bar
       useEffect(() => {
         if (!editMode || !fbarFocusRef.current) return;
         const t = setTimeout(() => {
@@ -352,7 +348,6 @@
         return () => clearTimeout(t);
       }, [editMode]);
 
-      // Global paste handler (select mode)
       useEffect(() => {
         const onPaste = e => {
           if (editMode || !sel) return;
@@ -397,12 +392,10 @@
         return () => window.removeEventListener("paste", onPaste);
       }, [sel, editMode, selEnd]);
 
-      // Global keyboard handler
       useEffect(() => {
         const onKey = e => {
           if (!sel) return;
 
-          // ── Edit mode: intercept Enter and Tab ──
           if (editMode) {
             if (e.key === "Enter") {
               e.preventDefault();
@@ -418,10 +411,9 @@
               const nc = NAV[Math.min(ci+1, NAV.length-1)];
               if (nc !== sel[0]) { setSel(`${nc}${parseInt(sel.slice(1))}`); setSelEnd(null); }
             }
-            return; // all other keys handled by the focused input
+            return;
           }
 
-          // ── Selected mode ──
           const col = sel[0], row = parseInt(sel.slice(1)), ci = NAV.indexOf(col);
 
           if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"].includes(e.key)) {
@@ -490,7 +482,6 @@
             return;
           }
 
-          // Keys below only apply to input cells
           if (!INP.has(sel)) return;
 
           if (e.key === "Enter") {
@@ -518,7 +509,6 @@
             return;
           }
 
-          // Any printable character enters edit mode pre-filled with that char
           if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
             e.preventDefault();
             startCharRef.current = e.key;
@@ -755,7 +745,6 @@
       else if (isLtxt) { bg=C.ltxt; fg=C.ltxtFg; ta="left"; fw=500; }
       else             { bg=C.formula; fg=C.formulaFg; }
 
-      // Selected: thick border. Range: blue tint. Edit mode: handled in ICell.
       const shadow = isSel ? `inset 0 0 0 2px ${C.selBorder}` : isInRange ? `inset 0 0 0 100px rgba(219,234,254,0.5)` : "none";
       const dot = isCorner ? <div style={{position:"absolute",bottom:-4,right:-4,width:8,height:8,borderRadius:"50%",background:C.selBorder,zIndex:10,pointerEvents:"none"}} /> : null;
 
